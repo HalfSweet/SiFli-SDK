@@ -5,7 +5,7 @@ import os
 import subprocess
 import shutil
 import sys
-import png
+# import png
 import logging
 
 output_folder = "output"

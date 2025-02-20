@@ -7,4 +7,5 @@
 /**/build_*
 /**/*.pyc
 .sconsign.dblite
+.DS_Store
 Kconfig.tmp

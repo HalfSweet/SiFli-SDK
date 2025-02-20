@@ -407,9 +407,9 @@ def LdsBuild(target, source, env):
     target_path = os.path.join(os.path.dirname(str(target[0])), 'link_copy.lds')
 
     p = subprocess.Popen([rtconfig.CC, '-E', '-P'] + include_paths + ['-x', 'c', str(source[0])], stdout=subprocess.PIPE)
-    (result, error) = p.communicate()    
+    (result, error) = p.communicate()
     f = open(target_path, "wb")
-    f.write(str(result))
+    f.write(result)
     f.close()   
 
 def FsBuild(target, source, env):
@@ -1402,7 +1402,7 @@ def InitBuild(bsp_root, build_dir, board):
         f.close()
 
     SIFLI_SDK = os.getenv('SIFLI_SDK')
-    KCONFIG_PATH = os.path.join(SIFLI_SDK, "tools/menuconfig/dist/kconfig.exe")
+    KCONFIG_PATH = os.path.join(SIFLI_SDK, "tools/kconfig/kconfig.py")
 
     board_path = board_path.replace("$SIFLI_SDK", SIFLI_SDK)
     board_path = os.path.dirname(board_path)   
@@ -1447,7 +1447,7 @@ def InitBuild(bsp_root, build_dir, board):
         retcode = subprocess.call([KCONFIG_PATH, '--handwritten-input-configs', os.path.join(build_dir, 'Kconfig'), 
                          os.path.join(build_dir, '.config'), os.path.join(build_dir, "rtconfig.h"), 
                          os.path.join(build_dir, "kconfiglist")] + conf_list)
-    
+    logging.error("retcode: {}".format(retcode))
     assert retcode == 0, "Fail to generate .config and rtconfig.h"
 
     src = GetCustomMemMapSrc(bsp_root, build_dir, rtconfig.CHIP, board)
