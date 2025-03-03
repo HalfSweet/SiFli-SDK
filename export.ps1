@@ -24,3 +24,8 @@ $sdk_exports = python "$sifli_sdk_path/tools/activate.py" --export
 # The dot sourcing is added here in PowerShell since
 # Win PSAnalyzer complains about using `Invoke-Expression` command
 . $sdk_exports
+
+# Set Scons path
+$env:SIFLI_SDK=$sifli_sdk_path
+$env:PYTHONPATH="$sifli_sdk_path/tools/build;$sifli_sdk_path/tools/build/default"
+$env:PATH="$sifli_sdk_path/tools/menuconfig/dist;$sifli_sdk_path/tools/scripts;$env:PATH"
