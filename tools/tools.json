@@ -118,6 +118,64 @@
           }
         }
       ]
+    },
+    {
+      "description": "Toolchain for 32-bit Arm based on GCC",
+      "export_paths": [
+        [
+          "arm-none-eabi",
+          "bin"
+        ]
+      ],
+      "export_vars": {},
+      "info_url": "https://github.com/OpenSiFli/crosstool-NG",
+      "install": "always",
+      "license": "GPL-3.0-with-GCC-exception",
+      "name": "arm-none-eabi-gcc",
+      "supported_targets": [
+        "sf32lb52"
+      ],
+      "version_cmd": [
+        "arm-none-eabi-gcc",
+        "--version"
+      ],
+      "version_regex": "\\)\\s+([0-9]+\\.[0-9]+\\.[0-9]+)",
+      "versions": [
+        {
+          "linux-amd64": {
+            "sha256": "62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823",
+            "size": 149739784,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-x86_64-linux-gnu.tar.xz"
+          },
+          "linux-arm64": {
+            "sha256": "87330bab085dd8749d4ed0ad633674b9dc48b237b61069e3b481abd364d0a684",
+            "size": 151967360,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-aarch64-linux-gnu.tar.xz"
+          },
+          "macos": {
+            "sha256": "2d9e717dd4f7751d18936ae1365d25916534105ebcb7583039eff1092b824505",
+            "size": 145118692,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-x86_64-apple-darwin.tar.xz"
+          },
+          "macos-arm64": {
+            "sha256": "c7c78ffab9bebfce91d99d3c24da6bf4b81c01e16cf551eb2ff9f25b9e0a3818",
+            "size": 134812148,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-aarch64-apple-darwin.tar.xz"
+          },
+          "name": "14.2.1",
+          "status": "recommended",
+          "win32": {
+            "sha256": "6facb152ce431ba9a4517e939ea46f057380f8f1e56b62e8712b3f3b87d994e1",
+            "size": 305393359,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-i686-w64-mingw32.zip"
+          },
+          "win64": {
+            "sha256": "f074615953f76036e9a51b87f6577fdb4ed8e77d3322a6f68214e92e7859888f",
+            "size": 312299563,
+            "url": "https://github.com/OpenSiFli/crosstool-ng/releases/download/14.2.0-20250221/arm-none-eabi-14.2.0-x86_64-w64-mingw32.zip"
+          }
+        }
+      ]
     }
   ],
   "version": 2

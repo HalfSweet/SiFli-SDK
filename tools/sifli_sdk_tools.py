@@ -94,7 +94,7 @@ DOWNLOAD_RETRY_COUNT = 3
 URL_PREFIX_MAP_SEPARATOR = ','
 SIFLI_SDK_TOOLS_INSTALL_CMD = os.environ.get('SIFLI_SDK_TOOLS_INSTALL_CMD')
 SIFLI_SDK_TOOLS_EXPORT_CMD = os.environ.get('SIFLI_SDK_TOOLS_INSTALL_CMD')
-SIFLI_SDK_DL_URL = 'https://dl.espressif.com/dl/esp-idf'
+SIFLI_SDK_DL_URL = 'https://downloads.sifli.com/dl/sifli-sdk'
 IDF_PIP_WHEELS_URL = os.environ.get('IDF_PIP_WHEELS_URL', 'https://dl.espressif.com/pypi')
 PYTHON_VENV_DIR_TEMPLATE = 'sifli-sdk{}_py{}_env'
 PYTHON_VER_MAJOR_MINOR = f'{sys.version_info.major}.{sys.version_info.minor}'
@@ -2172,7 +2172,7 @@ def action_export(args: Any) -> None:
 
     self_restart_cmd = f'{sys.executable} {__file__}{(" --tools-json {args.tools_json}") if args.tools_json else ""}'
     self_restart_cmd = to_shell_specific_paths([self_restart_cmd])[0]
-    prefer_system_hint = '' if IDF_TOOLS_EXPORT_CMD else f' To use it, run \'{self_restart_cmd} export --prefer-system\''
+    prefer_system_hint = '' if SIFLI_SDK_TOOLS_EXPORT_CMD else f' To use it, run \'{self_restart_cmd} export --prefer-system\''
     install_cmd = to_shell_specific_paths([SIFLI_SDK_TOOLS_INSTALL_CMD])[0] if SIFLI_SDK_TOOLS_INSTALL_CMD else f'{self_restart_cmd} install'
 
     for name, tool in tools_info.items():
@@ -2472,15 +2472,15 @@ def get_requirements(new_features: str) -> List[str]:
     return [feature_to_requirements_path(feature) for feature in features]
 
 
-def get_constraints(idf_version: str, online: bool = True) -> str:
+def get_constraints(sdk_version: str, online: bool = True) -> str:
     """
-    Download constraints file for specified IDF vversion if it was not downloaded recently (1 day),
+    Download constraints file for specified SiFli SDK vversion if it was not downloaded recently (1 day),
     check success and place it in constraints file location.
     """
-    idf_download_url = get_sifli_sdk_download_url_apply_mirrors()
-    constraint_file = f'espidf.constraints.v{idf_version}.txt'
+    sdk_download_url = get_sifli_sdk_download_url_apply_mirrors()
+    constraint_file = f'sdk.constraints.v{sdk_version}.txt'
     constraint_path = os.path.join(g.sifli_sdk_tools_path, constraint_file)
-    constraint_url = '/'.join([idf_download_url, constraint_file])
+    constraint_url = '/'.join([sdk_download_url, constraint_file])
     temp_path = f'{constraint_path}.tmp'
 
     if not online:
