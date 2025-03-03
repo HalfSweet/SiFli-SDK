@@ -29,3 +29,5 @@ $sdk_exports = python "$sifli_sdk_path/tools/activate.py" --export
 $env:SIFLI_SDK=$sifli_sdk_path
 $env:PYTHONPATH="$sifli_sdk_path/tools/build;$sifli_sdk_path/tools/build/default"
 $env:PATH="$sifli_sdk_path/tools/menuconfig/dist;$sifli_sdk_path/tools/scripts;$env:PATH"
+$env:RTT_CC="gcc"
+$env:RTT_EXEC_PATH=" "

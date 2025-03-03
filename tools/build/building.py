@@ -1402,7 +1402,11 @@ def InitBuild(bsp_root, build_dir, board):
         f.close()
 
     SIFLI_SDK = os.getenv('SIFLI_SDK')
-    KCONFIG_PATH = os.path.join(SIFLI_SDK, "tools/kconfig/kconfig.py")
+    if sys.platform == 'win32':
+        KCONFIG_PATH = os.path.join(SIFLI_SDK, "tools/kconfig/kconfig.py")
+    else:
+        KCONFIG_PATH = os.path.join(SIFLI_SDK, "tools/kconfig/kconfig.py")
+
 
     board_path = board_path.replace("$SIFLI_SDK", SIFLI_SDK)
     board_path = os.path.dirname(board_path)   
@@ -1440,12 +1444,13 @@ def InitBuild(bsp_root, build_dir, board):
     #    os.remove(os.path.join(build_dir, "rtconfig.h"))
 
     if (is_verbose()):
-        retcode = subprocess.call([KCONFIG_PATH, '--handwritten-input-configs', '--verbose', os.path.join(build_dir, 'Kconfig'), 
+        retcode = subprocess.call(['python', KCONFIG_PATH, '--handwritten-input-configs', '--verbose', os.path.join(build_dir, 'Kconfig'),
                          os.path.join(build_dir, '.config'), os.path.join(build_dir, "rtconfig.h"), 
                          os.path.join(build_dir, "kconfiglist")] + conf_list)
     else:
-        retcode = subprocess.call([KCONFIG_PATH, '--handwritten-input-configs', os.path.join(build_dir, 'Kconfig'), 
-                         os.path.join(build_dir, '.config'), os.path.join(build_dir, "rtconfig.h"), 
+        print(f"KCONFIG_PATH: {KCONFIG_PATH}")
+        retcode = subprocess.call(['python', KCONFIG_PATH, '--handwritten-input-configs', os.path.join(build_dir, 'Kconfig'),
+                         os.path.join(build_dir, '.config'), os.path.join(build_dir, "rtconfig.h"),
                          os.path.join(build_dir, "kconfiglist")] + conf_list)
     logging.error("retcode: {}".format(retcode))
     assert retcode == 0, "Fail to generate .config and rtconfig.h"
