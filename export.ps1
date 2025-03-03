@@ -15,12 +15,12 @@ if (-not (Test-Path "$sifli_sdk_path/tools/sifli_sdk_tools.py") -or
     Write-Output "Could not detect SIFLI_SDK_PATH. Please navigate to your SiFli-SDK directory and run:"
     Write-Output ".\export.ps1"
 
-    $env:IDF_PATH = ""
+    $env:SIFLI_SDK_PATH = ""
 
     exit 1
 }
 
-$idf_exports = python "$sifli_sdk_path/tools/activate.py" --export
+$sdk_exports = python "$sifli_sdk_path/tools/activate.py" --export
 # The dot sourcing is added here in PowerShell since
 # Win PSAnalyzer complains about using `Invoke-Expression` command
-. $idf_exports
+. $sdk_exports

@@ -72,7 +72,7 @@ def get_deactivate_cmd() -> str:
     return stdout
 
 
-@status_message('Establishing a new ESiFli-SDK environment')
+@status_message('Establishing a new SiFli-SDK environment')
 def get_sifli_sdk_env() -> Dict[str,str]:
     # Get SiFli-SDK system environment variables
     # extra_paths_list = [os.path.join('components', 'espcoredump'),

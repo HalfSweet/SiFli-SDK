@@ -2188,19 +2188,19 @@ def action_export(args: Any) -> None:
         raise SystemExit(1)
 
     current_path = os.getenv('PATH')
-    idf_python_env_path, idf_python_export_path, virtualenv_python, _ = get_python_env_path()
+    sifli_sdk_python_env_path, idf_python_export_path, virtualenv_python, _ = get_python_env_path()
     if os.path.exists(virtualenv_python):
-        idf_python_env_path = to_shell_specific_paths([idf_python_env_path])[0]
-        if os.getenv('IDF_PYTHON_ENV_PATH') != idf_python_env_path:
-            export_vars['IDF_PYTHON_ENV_PATH'] = to_shell_specific_paths([idf_python_env_path])[0]
+        sifli_sdk_python_env_path = to_shell_specific_paths([sifli_sdk_python_env_path])[0]
+        if os.getenv('SIFLI_SDK_PYTHON_ENV_PATH') != sifli_sdk_python_env_path:
+            export_vars['SIFLI_SDK_PYTHON_ENV_PATH'] = to_shell_specific_paths([sifli_sdk_python_env_path])[0]
         if current_path and idf_python_export_path not in current_path:  # getenv can return None
             paths_to_export.append(idf_python_export_path)
 
-    idf_version = get_sifli_sdk_version()
-    if os.getenv('ESP_IDF_VERSION') != idf_version:
-        export_vars['ESP_IDF_VERSION'] = idf_version
+    sifli_sdk_version = get_sifli_sdk_version()
+    if os.getenv('SIFLI_SDK_VERSION') != sifli_sdk_version:
+        export_vars['SIFLI_SDK_VERSION'] = sifli_sdk_version
 
-    check_python_venv_compatibility(idf_python_env_path, idf_version)
+    check_python_venv_compatibility(sifli_sdk_python_env_path, sifli_sdk_version)
 
     idf_tools_dir = os.path.join(g.sifli_sdk_path, 'tools')  # type: ignore
     idf_tools_dir = to_shell_specific_paths([idf_tools_dir])[0]
@@ -2222,11 +2222,12 @@ def action_export(args: Any) -> None:
         # idf-exe has to be before \tools in PATH
         if sys.platform == 'win32':
             paths_to_check = rf'{export_vars["PATH"]}{os.environ["PATH"]}'
-            try:
-                if paths_to_check.index(r'\tools;') < paths_to_check.index(r'\idf-exe'):
-                    warn('The PATH is not in correct order (idf-exe should be before esp-idf\\tools)')
-            except ValueError:
-                fatal(f'Both of the directories (..\\idf-exe\\.. and ..\\tools) has to be in the PATH:\n\n{paths_to_check}\n')
+            # We are not checking the order of paths in PATH variable
+            # try:
+            #     if paths_to_check.index(r'\tools;') < paths_to_check.index(r'\idf-exe'):
+            #         warn('The PATH is not in correct order (idf-exe should be before esp-idf\\tools)')
+            # except ValueError:
+            #     fatal(f'Both of the directories (..\\sdk-exe\\.. and ..\\tools) has to be in the PATH:\n\n{paths_to_check}\n')
 
     if export_vars:
         # if not copy of export_vars is given to function, it brekas the formatting string for 'export_statements'
@@ -2708,14 +2709,14 @@ def action_check_python_dependencies(args):  # type: ignore
     use_constraints = not args.no_constraints
     req_paths = get_requirements('')  # no new features -> just detect the existing ones
 
-    _, _, virtualenv_python, idf_version = get_python_env_path()
+    _, _, virtualenv_python, sifli_sdk_version = get_python_env_path()
 
     if not os.path.isfile(virtualenv_python):
-        fatal(f'{virtualenv_python} doesn\'t exist! Please run the install script or "idf_tools.py install-python-env" in order to create it')
+        fatal(f'{virtualenv_python} doesn\'t exist! Please run the install script or "sifli_sdk_tools.py install-python-env" in order to create it')
         raise SystemExit(1)
 
     if use_constraints:
-        constr_path = get_constraints(idf_version, online=False)  # keep offline for checking
+        constr_path = get_constraints(sifli_sdk_version, online=False)  # keep offline for checking
         info(f'Constraint file: {constr_path}')
 
     info('Requirement files:')

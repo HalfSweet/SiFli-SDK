@@ -123,7 +123,6 @@
       "description": "Toolchain for 32-bit Arm based on GCC",
       "export_paths": [
         [
-          "arm-none-eabi",
           "bin"
         ]
       ],
