@@ -2192,13 +2192,13 @@ def action_export(args: Any) -> None:
         raise SystemExit(1)
 
     current_path = os.getenv('PATH')
-    sifli_sdk_python_env_path, idf_python_export_path, virtualenv_python, _ = get_python_env_path()
+    sifli_sdk_python_env_path, sdk_python_export_path, virtualenv_python, _ = get_python_env_path()
     if os.path.exists(virtualenv_python):
         sifli_sdk_python_env_path = to_shell_specific_paths([sifli_sdk_python_env_path])[0]
         if os.getenv('SIFLI_SDK_PYTHON_ENV_PATH') != sifli_sdk_python_env_path:
             export_vars['SIFLI_SDK_PYTHON_ENV_PATH'] = to_shell_specific_paths([sifli_sdk_python_env_path])[0]
-        if current_path and idf_python_export_path not in current_path:  # getenv can return None
-            paths_to_export.append(idf_python_export_path)
+        if current_path and sdk_python_export_path not in current_path:  # getenv can return None
+            paths_to_export.append(sdk_python_export_path)
 
     sifli_sdk_version = get_sifli_sdk_version()
     if os.getenv('SIFLI_SDK_VERSION') != sifli_sdk_version:
@@ -2206,10 +2206,10 @@ def action_export(args: Any) -> None:
 
     check_python_venv_compatibility(sifli_sdk_python_env_path, sifli_sdk_version)
 
-    idf_tools_dir = os.path.join(g.sifli_sdk_path, 'tools')  # type: ignore
-    idf_tools_dir = to_shell_specific_paths([idf_tools_dir])[0]
-    if current_path and idf_tools_dir not in current_path:
-        paths_to_export.append(idf_tools_dir)
+    sdk_tools_dir = os.path.join(g.sifli_sdk_path, 'tools')  # type: ignore
+    sdk_tools_dir = to_shell_specific_paths([sdk_tools_dir])[0]
+    if current_path and sdk_tools_dir not in current_path:
+        paths_to_export.append(sdk_tools_dir)
 
     if sys.platform == 'win32':
         old_path = '%PATH%'
@@ -2251,12 +2251,12 @@ def get_sifli_sdk_download_url_apply_mirrors(args: Any = None, download_url: str
     return url
 
 
-def apply_mirror_prefix_map(args: Any, idf_download_url: str) -> str:
+def apply_mirror_prefix_map(args: Any, sdk_download_url: str) -> str:
     """
     Rewrite URL for given sifli_sdk_download_url.
     If --mirror-prefix-map flag or SIFLI_SDK_MIRROR_PREFIX_MAP environment variable is given.
     """
-    new_url = idf_download_url
+    new_url = sdk_download_url
     mirror_prefix_map = None
     mirror_prefix_map_env = os.getenv('SIFLI_SDK_MIRROR_PREFIX_MAP')
     if mirror_prefix_map_env:
@@ -2273,9 +2273,9 @@ def apply_mirror_prefix_map(args: Any, idf_download_url: str) -> str:
                 continue
             search, replace = item.split(URL_PREFIX_MAP_SEPARATOR, 1)
             replace = replace.replace('\\', '\\\\')  # On windows replace single \ with double \\
-            new_url = re.sub(search, replace, idf_download_url)
-            if new_url != idf_download_url:
-                info(f'Changed download URL: {idf_download_url} => {new_url}')
+            new_url = re.sub(search, replace, sdk_download_url)
+            if new_url != sdk_download_url:
+                info(f'Changed download URL: {sdk_download_url} => {new_url}')
                 break
     return new_url
 
@@ -2308,7 +2308,7 @@ def apply_github_assets_option(sifli_sdk_download_url: str) -> str:
 def get_tools_spec_and_platform_info(selected_platform: str, targets: List[str], tools_spec: List[str],
                                      quiet: bool = False) -> Tuple[List[str], Dict[str, SiFliSDKTool]]:
     """
-    Returns tools_spec list and dict of tools for selected platform in form tool_name : IDFTool object.
+    Returns tools_spec list and dict of tools for selected platform in form tool_name : SDKTool object.
     NOTE: If this function is not called from action_download, but is used just for detecting active tools, info about downloading is unwanted.
     """
     global global_quiet
@@ -2331,18 +2331,18 @@ def get_tools_spec_and_platform_info(selected_platform: str, targets: List[str],
 
 def action_download(args):  # type: ignore
     """
-    Saves current IDF environment and for every tools in tools_spec, downloads the right archive for tools version and target platform, if possible.
+    Saves current SiFli-SDK environment and for every tools in tools_spec, downloads the right archive for tools version and target platform, if possible.
     If not, prints appropriate message to stderr and raise SystemExit() exception.
     """
     tools_spec = parse_tools_arg(args.tools)
 
     targets: List[str] = []
-    # Saving IDFEnv::targets for selected ESP_targets if all tools have been specified
+    # Saving SDKEnv::targets for selected ESP_targets if all tools have been specified
     if 'required' in tools_spec or 'all' in tools_spec:
-        idf_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
-        targets = add_and_check_targets(idf_env_obj, args.targets)
+        sdk_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
+        targets = add_and_check_targets(sdk_env_obj, args.targets)
         try:
-            idf_env_obj.save()
+            sdk_env_obj.save()
         except OSError as err:
             if args.targets in targets:
                 targets.remove(args.targets)
@@ -2375,8 +2375,8 @@ def action_download(args):  # type: ignore
         tool_spec = f'{tool_name}@{tool_version}'
 
         info(f'Downloading {tool_spec}')
-        _idf_tool_obj = tool_obj.versions[tool_version].get_download_for_platform(platform)
-        _idf_tool_obj.url = get_sifli_sdk_download_url_apply_mirrors(args, _idf_tool_obj.url)
+        _sdk_tool_obj = tool_obj.versions[tool_version].get_download_for_platform(platform)
+        _sdk_tool_obj.url = get_sifli_sdk_download_url_apply_mirrors(args, _sdk_tool_obj.url)
 
         tool_obj.download(tool_version)
 
@@ -2389,12 +2389,12 @@ def action_install(args):  # type: ignore
     tools_spec = parse_tools_arg(args.tools)
 
     targets: List[str] = []
-    # Saving IDFEnv::targets for selected ESP_targets if all tools have been specified
+    # Saving SDKEnv::targets for selected ESP_targets if all tools have been specified
     if 'required' in tools_spec or 'all' in tools_spec:
-        idf_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
-        targets = add_and_check_targets(idf_env_obj, args.targets)
+        sdk_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
+        targets = add_and_check_targets(sdk_env_obj, args.targets)
         try:
-            idf_env_obj.save()
+            sdk_env_obj.save()
         except OSError as err:
             if args.targets in targets:
                 targets.remove(args.targets)
@@ -2437,8 +2437,8 @@ def action_install(args):  # type: ignore
             continue
 
         info(f'Installing {tool_spec}')
-        _idf_tool_obj = tool_obj.versions[tool_version].get_download_for_platform(PYTHON_PLATFORM)
-        _idf_tool_obj.url = get_sifli_sdk_download_url_apply_mirrors(args, _idf_tool_obj.url)
+        _sdk_tool_obj = tool_obj.versions[tool_version].get_download_for_platform(PYTHON_PLATFORM)
+        _sdk_tool_obj.url = get_sifli_sdk_download_url_apply_mirrors(args, _sdk_tool_obj.url)
 
         tool_obj.download(tool_version)
         tool_obj.install(tool_version)
@@ -2466,10 +2466,10 @@ def get_requirements(new_features: str) -> List[str]:
     """
     Returns list of path for requirements.txt for given feature list.
     """
-    idf_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
-    features = process_and_check_features(idf_env_obj, new_features)
+    sdk_env_obj = SiFliSDKEnv.get_sifli_sdk_env()
+    features = process_and_check_features(sdk_env_obj, new_features)
     try:
-        idf_env_obj.save()
+        sdk_env_obj.save()
     except OSError as err:
         if new_features in features:
             features.remove(new_features)
@@ -2584,13 +2584,13 @@ def action_install_python_env(args):  # type: ignore
     """
     use_constraints = not args.no_constraints
     reinstall = args.reinstall
-    idf_python_env_path, _, virtualenv_python, idf_version = get_python_env_path()
+    sdk_python_env_path, _, virtualenv_python, sdk_version = get_python_env_path()
 
     nix_store = os.environ.get('NIX_STORE')
     is_nix = nix_store is not None and sys.base_prefix.startswith(nix_store) and sys.prefix.startswith(nix_store)
 
     is_virtualenv = not is_nix and (hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
-    if is_virtualenv and (not os.path.exists(idf_python_env_path) or reinstall):
+    if is_virtualenv and (not os.path.exists(sdk_python_env_path) or reinstall):
         fatal('This script was called from a virtual environment, can not create a virtual environment again')
         raise SystemExit(1)
 
@@ -2616,57 +2616,57 @@ def action_install_python_env(args):  # type: ignore
                 warn('curses can not be imported, new virtual environment will be created.')
                 reinstall = True
 
-    if reinstall and os.path.exists(idf_python_env_path):
-        warn(f'Removing the existing Python environment in {idf_python_env_path}')
-        shutil.rmtree(idf_python_env_path)
+    if reinstall and os.path.exists(sdk_python_env_path):
+        warn(f'Removing the existing Python environment in {sdk_python_env_path}')
+        shutil.rmtree(sdk_python_env_path)
 
     if os.path.exists(virtualenv_python):
-        check_python_venv_compatibility(idf_python_env_path, idf_version)
+        check_python_venv_compatibility(sdk_python_env_path, sdk_version)
     else:
         if subprocess.run([sys.executable, '-m', 'venv', '-h'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
             # venv available
             virtualenv_options = ['--clear']  # delete environment if already exists
 
-            info(f'Creating a new Python environment in {idf_python_env_path}')
+            info(f'Creating a new Python environment in {sdk_python_env_path}')
 
             try:
-                environ_idf_python_env_path = os.environ['IDF_PYTHON_ENV_PATH']
-                correct_env_path = environ_idf_python_env_path.endswith(PYTHON_VENV_DIR_TEMPLATE.format(idf_version,
+                environ_sdk_python_env_path = os.environ['SIFLI_SDK_PYTHON_ENV_PATH']
+                correct_env_path = environ_sdk_python_env_path.endswith(PYTHON_VENV_DIR_TEMPLATE.format(sdk_version,
                                                                                                         PYTHON_VER_MAJOR_MINOR))
                 if not correct_env_path and re.search(PYTHON_VENV_DIR_TEMPLATE.format(r'\d+\.\d+', r'\d+\.\d+'),
-                                                      environ_idf_python_env_path):
-                    warn(f'IDF_PYTHON_ENV_PATH is set to {environ_idf_python_env_path} but it does not match '
-                         f'the detected {idf_version} ESP-IDF version and/or the used {PYTHON_VER_MAJOR_MINOR} '
-                         'version of Python. If you have not set IDF_PYTHON_ENV_PATH intentionally then it is '
-                         'recommended to re-run this script from a clean shell where an ESP-IDF environment is '
+                                                      environ_sdk_python_env_path):
+                    warn(f'SIFLI_SDK_PYTHON_ENV_PATH is set to {environ_sdk_python_env_path} but it does not match '
+                         f'the detected {sdk_version} SiFli-SDK version and/or the used {PYTHON_VER_MAJOR_MINOR} '
+                         'version of Python. If you have not set SIFLI_SDK_PYTHON_ENV_PATH intentionally then it is '
+                         'recommended to re-run this script from a clean shell where an SiFli-SDK environment is '
                          'not active.')
 
             except KeyError:
-                # if IDF_PYTHON_ENV_PATH not defined then the above checks can be skipped
+                # if SIFLI_SDK_PYTHON_ENV_PATH not defined then the above checks can be skipped
                 pass
 
             subprocess.check_call([sys.executable, '-m', 'venv',
                                   *virtualenv_options,
-                                  idf_python_env_path],
+                                  sdk_python_env_path],
                                   stdout=sys.stdout, stderr=sys.stderr)
 
             try:
-                with open(os.path.join(idf_python_env_path, VENV_VER_FILE), 'w', encoding='utf-8') as f:
-                    f.write(idf_version)
+                with open(os.path.join(sdk_python_env_path, VENV_VER_FILE), 'w', encoding='utf-8') as f:
+                    f.write(sdk_version)
             except OSError as e:
-                warn(f'The following issue occurred while generating the ESP-IDF version file in the Python environment: {e}. '
+                warn(f'The following issue occurred while generating the SiFli-SDK version file in the Python environment: {e}. '
                      '(Diagnostic information. It can be ignored.)')
 
         else:
             # The embeddable Python for Windows doesn't have the built-in venv module
-            install_legacy_python_virtualenv(idf_python_env_path)
+            install_legacy_python_virtualenv(sdk_python_env_path)
 
     env_copy = os.environ.copy()
     if env_copy.get('PIP_USER')  == 'yes':
         warn('Found PIP_USER="yes" in the environment. Disabling PIP_USER in this shell to install packages into a virtual environment.')
         env_copy['PIP_USER'] = 'no'
 
-    constraint_file = get_constraints(idf_version) if use_constraints else None
+    constraint_file = get_constraints(sdk_version) if use_constraints else None
 
     info('Upgrading pip...')
     run_args = [virtualenv_python, '-m', 'pip', 'install', '--upgrade', 'pip']
@@ -2728,7 +2728,7 @@ def action_check_python_dependencies(args):  # type: ignore
 
     info(f'Python being checked: {virtualenv_python}')
 
-    # The dependency checker will be invoked with virtualenv_python. idf_tools.py could have been invoked with a
+    # The dependency checker will be invoked with virtualenv_python. sifli_sdk_tools.py could have been invoked with a
     # different one, therefore, importing is not a suitable option.
     dep_check_cmd = [virtualenv_python,
                      os.path.join(g.sifli_sdk_path,
@@ -2827,7 +2827,7 @@ class ChecksumFileParser():
 
 def action_add_version(args: Any) -> None:
     """
-    Adds new version of the tool to IDFTool entry together with download entry and updating json dump.
+    Adds new version of the tool to SDKTool entry together with download entry and updating json dump.
     """
     tools_info = load_tools_info()
     tool_name = args.tool
@@ -2897,7 +2897,7 @@ def action_rewrite(args):  # type: ignore
 
 def action_uninstall(args: Any) -> None:
     """
-    Print or remove installed tools versions, that are not used by active ESP-IDF version anymore.
+    Print or remove installed tools versions, that are not used by active SiFli-SDK version anymore.
     Additionally remove all older versions of previously downloaded archives.
     """
     tools_info = load_tools_info()
@@ -2916,7 +2916,7 @@ def action_uninstall(args: Any) -> None:
             unused_tools_versions[tool] = unused_versions
 
     # Keeping tools added by windows installer
-    KEEP_WIN_TOOLS = ['idf-git', 'idf-python']
+    KEEP_WIN_TOOLS = ['sdk-git', 'sdk-python']
     for tool in KEEP_WIN_TOOLS:
         if tool in unused_tools_versions:
             unused_tools_versions.pop(tool)
@@ -2925,10 +2925,10 @@ def action_uninstall(args: Any) -> None:
     if args.dry_run:
         if unused_tools_versions:
             print('For removing old versions of {} use command \'{} {} {}\''.format(', '.join(unused_tools_versions), get_python_exe_and_subdir()[0],
-                  os.path.join(g.sifli_sdk_path, 'tools', 'idf_tools.py'), 'uninstall'))
+                  os.path.join(g.sifli_sdk_path, 'tools', 'sifli_sdk_tools.py'), 'uninstall'))
         return
 
-    # Remove installed tools that are not used by current ESP-IDF version.
+    # Remove installed tools that are not used by current SiFli-SDK version.
     for tool in unused_tools_versions:
         for version in unused_tools_versions[tool]:
             try:
@@ -2941,7 +2941,7 @@ def action_uninstall(args: Any) -> None:
             except OSError as error:
                 warn(f'{error.filename} can not be removed because {error.strerror}.')
 
-    # Remove old archives versions and archives that are not used by the current ESP-IDF version.
+    # Remove old archives versions and archives that are not used by the current SiFli-SDK version.
     if args.remove_archives:
         tools_spec, tools_info_for_platform = get_tools_spec_and_platform_info(CURRENT_PLATFORM, ['all'], ['all'], quiet=True)
         used_archives = []
@@ -3005,11 +3005,11 @@ def action_gen_doc(args):  # type: ignore
     print_out('   :trim:')
     print_out('')
 
-    idf_gh_url = 'https://github.com/espressif/esp-idf'
+    sdk_gh_url = 'https://github.com/OpenSiFli/SiFli-SDK'
     for tool_name, tool_obj in tools_info.items():
         info_url = tool_obj.options.info_url
-        if f'{idf_gh_url}/tree' in info_url:
-            info_url = re.sub(f'{idf_gh_url}/tree/\\w+/(.*)', r':idf:`\1`', info_url)
+        if f'{sdk_gh_url}/tree' in info_url:
+            info_url = re.sub(f'{sdk_gh_url}/tree/\\w+/(.*)', r':sdk:`\1`', info_url)
 
         license_url = f'https://spdx.org/licenses/{tool_obj.options.license}'
 
@@ -3021,7 +3021,7 @@ def action_gen_doc(args):  # type: ignore
 
 {description}
 
-.. include:: idf-tools-notes.inc
+.. include:: sdk-tools-notes.inc
    :start-after: tool-{name}-notes
    :end-before: ---
 
@@ -3077,7 +3077,7 @@ More info: {info_url}
 
 def action_check_tool_supported(args: Any) -> None:
     """
-    Print "True"/"False" to stdout as a result that tool is supported in IDF.
+    Print "True"/"False" to stdout as a result that tool is supported in SiFli-SDK.
     Print error message to stderr otherwise and set exit code to 1.
     """
     try:
@@ -3129,9 +3129,9 @@ def main(argv: List[str]) -> None:
                                                  'but has an unsupported version, a version from the tools directory '
                                                  'will be used instead. If this flag is given, the version in PATH '
                                                  'will be used.'), action='store_true')
-    export.add_argument('--deactivate', help='Output command for deactivate different ESP-IDF version, previously set with export', action='store_true')
+    export.add_argument('--deactivate', help='Output command for deactivate different SiFli-SDK version, previously set with export', action='store_true')
     export.add_argument('--unset', help=argparse.SUPPRESS, action='store_true')
-    export.add_argument('--add_paths_extras', help='Add idf-related path extras for deactivate option')
+    export.add_argument('--add_paths_extras', help='Add sdk-related path extras for deactivate option')
     install = subparsers.add_parser('install', help='Download and install tools into the tools directory')
     install.add_argument('tools', metavar='TOOL', nargs='*', default=['required'],
                          help=('Tools to install.\n'
@@ -3153,11 +3153,11 @@ def main(argv: List[str]) -> None:
     download.add_argument('--targets', default='all', help=('A comma separated list of desired chip targets for installing. '
                                                             ' It defaults to installing all supported targets.'))
 
-    uninstall = subparsers.add_parser('uninstall', help='Remove installed tools, that are not used by current version of ESP-IDF.')
+    uninstall = subparsers.add_parser('uninstall', help='Remove installed tools, that are not used by current version of SiFli-SDK.')
     uninstall.add_argument('--dry-run', help='Print unused tools.', action='store_true')
     uninstall.add_argument('--remove-archives', help='Remove old archive versions and archives from unused tools.', action='store_true')
 
-    no_constraints_default = os.environ.get('IDF_PYTHON_CHECK_CONSTRAINTS', '').lower() in ['0', 'n', 'no']
+    no_constraints_default = os.environ.get('SIFLI_SDK_PYTHON_CHECK_CONSTRAINTS', '').lower() in ['0', 'n', 'no']
 
     if SDK_MAINTAINER:
         for subparser in [download, install]:
@@ -3178,7 +3178,7 @@ def main(argv: List[str]) -> None:
                                                                         'It defaults to installing just the core functionality.'))
     install_python_env.add_argument('--no-constraints', action='store_true', default=no_constraints_default,
                                     help=('Disable constraint settings. Use with care and only when you want to manage '
-                                          'package versions by yourself. It can be set with the IDF_PYTHON_CHECK_CONSTRAINTS '
+                                          'package versions by yourself. It can be set with the SIFLI_SDK_PYTHON_CHECK_CONSTRAINTS '
                                           'environment variable.'))
 
     if SDK_MAINTAINER:
@@ -3209,12 +3209,12 @@ def main(argv: List[str]) -> None:
                                                       help='Check that all required Python packages are installed.')
     check_python_dependencies.add_argument('--no-constraints', action='store_true', default=no_constraints_default,
                                            help='Disable constraint settings. Use with care and only when you want '
-                                                'to manage package versions by yourself. It can be set with the IDF_PYTHON_CHECK_CONSTRAINTS '
+                                                'to manage package versions by yourself. It can be set with the SIFLI_SDK_PYTHON_CHECK_CONSTRAINTS '
                                                 'environment variable.')
 
-    if os.environ.get('IDF_TOOLS_VERSION_HELPER'):
+    if os.environ.get('SIFLI_SDK_TOOLS_VERSION_HELPER'):
         check_tool_supported = subparsers.add_parser('check-tool-supported',
-                                                     help='Check that selected tool is compatible with IDF. Writes "True"/"False" to stdout in success.')
+                                                     help='Check that selected tool is compatible with SiFli-SDK. Writes "True"/"False" to stdout in success.')
         check_tool_supported.add_argument('--tool-name', required=True, help='Tool name (from tools.json)')
         check_tool_supported.add_argument('--exec-path', required=True, help='Full path to executable under the test')
 
