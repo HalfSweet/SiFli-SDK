@@ -54,6 +54,8 @@ from ssl import SSLContext
 from tarfile import TarFile
 from zipfile import ZipFile
 
+from tools.activate import sdk_path
+
 # Important notice: Please keep the lines above compatible with old Pythons so it won't fail with ImportError but with
 # a nice message printed by python_version_checker.check()
 try:
@@ -95,7 +97,7 @@ URL_PREFIX_MAP_SEPARATOR = ','
 SIFLI_SDK_TOOLS_INSTALL_CMD = os.environ.get('SIFLI_SDK_TOOLS_INSTALL_CMD')
 SIFLI_SDK_TOOLS_EXPORT_CMD = os.environ.get('SIFLI_SDK_TOOLS_INSTALL_CMD')
 SIFLI_SDK_DL_URL = 'https://downloads.sifli.com/dl/sifli-sdk'
-IDF_PIP_WHEELS_URL = os.environ.get('IDF_PIP_WHEELS_URL', 'https://dl.espressif.com/pypi')
+SIFLI_SDK_PIP_WHEELS_URL = os.environ.get('SIFLI_SDK_PIP_WHEELS_URL', 'https://dl.espressif.com/pypi')
 PYTHON_VENV_DIR_TEMPLATE = 'sifli-sdk{}_py{}_env'
 PYTHON_VER_MAJOR_MINOR = f'{sys.version_info.major}.{sys.version_info.minor}'
 VENV_VER_FILE = 'sifli_sdk_version.txt'
@@ -186,9 +188,9 @@ def print_hints_on_download_error(err: str) -> None:
 
     # Certificate issue on Windows can be hidden under different errors which might be even translated,
     # e.g. "[WinError -2146881269] ASN1 valor de tag inválido encontrado"
-    if sys.platform == 'win32':
-        info('By downloading and using the offline installer from https://dl.espressif.com/dl/esp-idf '
-             'you might be able to work around this issue.')
+    # if sys.platform == 'win32':
+    #     info('By downloading and using the offline installer from https://dl.espressif.com/dl/esp-idf '
+    #          'you might be able to work around this issue.')
 
 
 PYTHON_PLATFORM = f'{platform.system()}-{platform.machine()}'
@@ -310,7 +312,7 @@ class Platforms:
             raise ValueError('System platform could not be identified.')
 
         if platform_alias in Platforms.UNSUPPORTED_PLATFORMS:
-            raise ValueError(f'Platform \'{platform_alias}\' is not supported by ESP-IDF.')
+            raise ValueError(f'Platform \'{platform_alias}\' is not supported by SiFli-SDK.')
 
         if platform_alias == 'any' and CURRENT_PLATFORM:
             platform_alias = CURRENT_PLATFORM
@@ -753,7 +755,7 @@ class SiFliSDKToolVersion(object):
 
     def add_download(self, platform_name: str, url: str, size: int, sha256: str, rename_dist: str = '') -> None:
         """
-        Add download entry of type IDFToolDownload into self.downloads.
+        Add download entry of type SiFliSDKToolDownload into self.downloads.
         """
         self.downloads[platform_name] = SiFliSDKToolDownload(platform_name, url, size, sha256, rename_dist)
 
@@ -801,8 +803,8 @@ SiFliSDKToolOptions = namedtuple('SiFliSDKToolOptions', [
 
 class SiFliSDKTool(object):
     """
-    Used to store info about IDF tools from tools.json file in a Python-accesible form.
-    The term "IDF tool" is used for e.g. CMake, ninja, QUEMU and toolchains.
+    Used to store info about SDK tools from tools.json file in a Python-accesible form.
+    The term "SDK tool" is used for e.g. CMake, ninja, QUEMU and toolchains.
     """
     # possible values of 'install' field
     INSTALL_ALWAYS = 'always'
@@ -836,7 +838,7 @@ class SiFliSDKTool(object):
 
     def copy_for_platform(self, platform: str) -> 'SiFliSDKTool':
         """
-        Copy the IDFTool record in respect to given platform (e.g. apply platform overrides).
+        Copy the SDKTool record in respect to given platform (e.g. apply platform overrides).
         """
         result = copy.deepcopy(self)
         result._platform = platform
@@ -863,7 +865,7 @@ class SiFliSDKTool(object):
 
     def add_version(self, version: SiFliSDKToolVersion) -> None:
         """
-        Add new IDFVersion to self.versions.
+        Add new SDKVersion to self.versions.
         """
         assert type(version) is SiFliSDKToolVersion
         self.versions[version.version] = version
@@ -1134,7 +1136,7 @@ class SiFliSDKTool(object):
     def install(self, version: str) -> None:
         """
         Unpack archive to destination directory and remove given number of top-level folder if specified.
-        Should always be called after IDFTool.download().
+        Should always be called after SDKTool.download().
         """
         # Currently this is called after calling 'download' method, so here are a few asserts
         # for the conditions which should be true once that method is done.
@@ -1176,7 +1178,7 @@ class SiFliSDKTool(object):
     @classmethod
     def from_json(cls, tool_dict: Dict[str, Union[str, List[str], Dict[str, str]]]) -> 'SiFliSDKTool':
         """
-        Create IDFTool class instance form its JSON dump.
+        Create SDKTool class instance form its JSON dump.
         """
         # Validate json fields
         tool_name = tool_dict.get('name')  # type: ignore
@@ -1481,8 +1483,8 @@ class SiFliSDKEnv:
         * sifli_sdk_installed - all installed environments of SiFli-SDK on system.
     """
     def __init__(self) -> None:
-        active_idf_id = active_repo_id()
-        self.sifli_sdk_installed: Dict[str, SiFliSDKRecord] = {active_idf_id: SiFliSDKRecord.get_active_sifli_sdk_record()}
+        active_sdk_id = active_repo_id()
+        self.sifli_sdk_installed: Dict[str, SiFliSDKRecord] = {active_sdk_id: SiFliSDKRecord.get_active_sifli_sdk_record()}
 
     def __iter__(self):  # type: ignore
         yield from {
@@ -1497,7 +1499,7 @@ class SiFliSDKEnv:
 
     def save(self) -> None:
         """
-        Diff current class instance with instance loaded from IDF_ENV_FILE and save only if are different.
+        Diff current class instance with instance loaded from SIFLI_SDK_ENV_FILE and save only if are different.
         """
         # It is enough to compare just active records because others can't be touched by the running script
         if self.get_active_sifli_sdk_record() != self.get_sifli_sdk_env().get_active_sifli_sdk_record():
@@ -1537,18 +1539,18 @@ class SiFliSDKEnv:
                 else:
                     # Load and verify SiFli-SDK records found in SIFLI_SDK_ENV_FILE
                     sifli_sdk_installed.pop('sha', None)
-                    idf_installed_verified:Dict[str, SiFliSDKRecord] = {}
-                    for idf in sifli_sdk_installed:
+                    sdk_path_installed_verified:Dict[str, SiFliSDKRecord] = {}
+                    for sdk in sifli_sdk_installed:
                         try:
-                            idf_installed_verified[idf] = SiFliSDKRecord.get_sifli_sdk_record_from_dict(sifli_sdk_installed[idf])
+                            sdk_path_installed_verified[sdk] = SiFliSDKRecord.get_sifli_sdk_record_from_dict(sifli_sdk_installed[sdk])
                         except ValueError as err:
-                            warn(f'{err} "{idf}" found in {sifli_sdk_env_file_path}, removing this record.')
+                            warn(f'{err} "{sdk}" found in {sifli_sdk_env_file_path}, removing this record.')
                     # Combine SiFli-SDK loaded records with the one in constructor, to be sure that there is an active SiFli-SDK record in the sifli_sdk_installed
                     # If the active record is already in sifli_sdk_installed, it is not overwritten
-                    sifli_sdk_env_obj.sifli_sdk_installed = dict(sifli_sdk_env_obj.sifli_sdk_installed, **idf_installed_verified)
+                    sifli_sdk_env_obj.sifli_sdk_installed = dict(sifli_sdk_env_obj.sifli_sdk_installed, **sdk_path_installed_verified)
 
         except (IOError, OSError, ValueError):
-            # If no, empty or not-accessible to read IDF_ENV_FILE found, use default values from constructor
+            # If no, empty or not-accessible to read SIFLI_SDK_ENV_FILE found, use default values from constructor
             pass
 
         return sifli_sdk_env_obj
@@ -1593,8 +1595,8 @@ class ENVState:
                     self.deactivate_file_path = fp.name
                     fp.write(json.dumps(self.sifli_sdk_variables, ensure_ascii=False, indent=4).encode('utf-8'))
         except (IOError, OSError):
-            warn(f'File storing IDF env variables {self.deactivate_file_path} is not accessible to write. '
-                 'Potentional switching ESP-IDF versions may cause problems')
+            warn(f'File storing SiFli-SDK env variables {self.deactivate_file_path} is not accessible to write. '
+                 'Potentional switching SiFli-SDK versions may cause problems')
         return self.deactivate_file_path
 
 
@@ -1614,7 +1616,7 @@ def load_tools_info() -> Dict[str, SiFliSDKTool]:
 def parse_tools_info_json(tools_info):  # type: ignore
     """
     Parse and validate the dictionary obtained by loading the tools.json file.
-    Returns a dictionary of tools (key: tool name, value: IDFTool object).
+    Returns a dictionary of tools (key: tool name, value: SDKTool object).
     """
     tools_dict = OrderedDict()
 
@@ -1764,13 +1766,13 @@ def parse_targets_arg(targets_str: str) -> List[str]:
         return targets
 
 
-def add_and_check_targets(idf_env_obj: SiFliSDKEnv, targets_str: str) -> List[str]:
+def add_and_check_targets(sdk_env_obj: SiFliSDKEnv, targets_str: str) -> List[str]:
     """
     Define targets from targets_str, check that the target names are valid and add them to sifli_sdk_env_obj.
     """
     targets = parse_targets_arg(targets_str)
-    idf_env_obj.get_active_sifli_sdk_record().extend_targets(targets)
-    return idf_env_obj.get_active_sifli_sdk_record().targets
+    sdk_env_obj.get_active_sifli_sdk_record().extend_targets(targets)
+    return sdk_env_obj.get_active_sifli_sdk_record().targets
 
 
 def feature_to_requirements_path(feature: str) -> str:
@@ -1780,9 +1782,9 @@ def feature_to_requirements_path(feature: str) -> str:
     return os.path.join(g.sifli_sdk_path, 'tools', 'requirements', f'requirements.{feature}.txt')
 
 
-def process_and_check_features(idf_env_obj: SiFliSDKEnv, features_str: str) -> List[str]:
+def process_and_check_features(sdk_env_obj: SiFliSDKEnv, features_str: str) -> List[str]:
     """
-    Check whether new feature is valid. If yes, update features in active IDF record.
+    Check whether new feature is valid. If yes, update features in active SiFli-SDK record.
     """
     new_features = []
     remove_features = []
@@ -1794,8 +1796,8 @@ def process_and_check_features(idf_env_obj: SiFliSDKEnv, features_str: str) -> L
             # Feature to be added needs to be checked if is valid
             if os.path.isfile(feature_to_requirements_path(new_feature_candidate)):
                 new_features += [new_feature_candidate]
-    idf_env_obj.get_active_sifli_sdk_record().update_features(tuple(new_features), tuple(remove_features))
-    return idf_env_obj.get_active_sifli_sdk_record().features
+    sdk_env_obj.get_active_sifli_sdk_record().update_features(tuple(new_features), tuple(remove_features))
+    return sdk_env_obj.get_active_sifli_sdk_record().features
 
 
 def get_all_targets_from_tools_json() -> List[str]:
@@ -1818,7 +1820,7 @@ def filter_tools_info(sifli_sdk_env_obj: SiFliSDKEnv, tools_info: Dict[str, SiFl
     """
     Filter tools info; return only those targets which:
         * are installable (install type is INSTALL_ALWAYS or INSTALL_ON_REQUEST)
-        * support at least one target from active IDF record
+        * support at least one target from active SiFli-SDK record
     """
     targets = sifli_sdk_env_obj.get_active_sifli_sdk_record().targets
     if not targets:
@@ -1844,9 +1846,9 @@ def add_variables_to_deactivate_file(args: List[str], new_sifli_sdk_vars:Dict[st
     env_state_obj = ENVState.get_env_state()
 
     if env_state_obj.sifli_sdk_variables:
-        exported_idf_vars = env_state_obj.sifli_sdk_variables
-        new_sifli_sdk_vars['PATH'] = list(set(new_sifli_sdk_vars['PATH'] + exported_idf_vars.get('PATH', [])))  # remove duplicates
-        env_state_obj.sifli_sdk_variables = dict(exported_idf_vars, **new_sifli_sdk_vars)  # merge two dicts
+        exported_sdk_vars = env_state_obj.sifli_sdk_variables
+        new_sifli_sdk_vars['PATH'] = list(set(new_sifli_sdk_vars['PATH'] + exported_sdk_vars.get('PATH', [])))  # remove duplicates
+        env_state_obj.sifli_sdk_variables = dict(exported_sdk_vars, **new_sifli_sdk_vars)  # merge two dicts
     else:
         env_state_obj.sifli_sdk_variables = new_sifli_sdk_vars
     deactivate_file_path = env_state_obj.save()
@@ -1856,7 +1858,7 @@ def add_variables_to_deactivate_file(args: List[str], new_sifli_sdk_vars:Dict[st
 
 def print_deactivate_statement(args: List[str]) -> None:
     """
-    Deactivate statement is sequence of commands, that remove IDF global variables from environment,
+    Deactivate statement is sequence of commands, that remove SiFli-SDK global variables from environment,
     so the environment gets to the state it was before calling export.{sh/fish} script.
     """
     env_state_obj = ENVState.get_env_state()
@@ -1898,21 +1900,21 @@ def get_unset_format_and_separator(args: List[str]) -> Tuple[str, str]:
     return {EXPORT_SHELL: ('unset {}', ';'), EXPORT_KEY_VALUE: ('{}', '\n')}[args.format]  # type: ignore
 
 
-def different_idf_detected() -> bool:
+def different_sdk_detected() -> bool:
     """
-    Checks if new IDF detected.
+    Checks if new SiFli-SDK detected.
     """
-    # If IDF global variable found, test if belong to different ESP-IDF version
-    if 'IDF_TOOLS_EXPORT_CMD' in os.environ:
-        if g.sifli_sdk_path != os.path.dirname(os.environ['IDF_TOOLS_EXPORT_CMD']):
+    # If SDK global variable found, test if belong to different SiFli-SDK version
+    if 'SIFLI_SDK_TOOLS_EXPORT_CMD' in os.environ:
+        if g.sifli_sdk_path != os.path.dirname(os.environ['SIFLI_SDK_TOOLS_EXPORT_CMD']):
             return True
 
-    # No previous ESP-IDF export detected, nothing to be unset
-    if all(s not in os.environ for s in ['IDF_PYTHON_ENV_PATH', 'OPENOCD_SCRIPTS', 'ESP_IDF_VERSION']):
+    # No previous SiFli-SDK export detected, nothing to be unset
+    if all(s not in os.environ for s in ['SIFLI_SDK_PYTHON_ENV_PATH', 'OPENOCD_SCRIPTS', 'SIFLI_SDK_VERSION']):
         return False
 
     # User is exporting the same version as is in env
-    if os.getenv('ESP_IDF_VERSION') == get_sifli_sdk_version():
+    if os.getenv('SIFLI_SDK_VERSION') == get_sifli_sdk_version():
         return False
 
     # Different version detected
@@ -1921,7 +1923,7 @@ def different_idf_detected() -> bool:
 
 def active_repo_id() -> str:
     """
-    Function returns unique id of running ESP-IDF combining current idfpath with version.
+    Function returns unique id of running SiFli-SDK combining current sdkpath with version.
     The id is unique with same version & different path or same path & different version.
     """
     try:
@@ -2066,8 +2068,10 @@ def handle_missing_versions(
     """
     msg = f'tool {tool.name} has no installed versions.'
     if 'NIX_PATH' in os.environ:
+        # fatal(f'{msg} The environment indicates that you might be using NixOS. '
+        #       'Please see https://nixos.wiki/wiki/ESP-IDF for how to install tools for it.')
         fatal(f'{msg} The environment indicates that you might be using NixOS. '
-              'Please see https://nixos.wiki/wiki/ESP-IDF for how to install tools for it.')
+              'We do not support NixOS at the moment')
     else:
         fatal(f'{msg} Please run \'{install_cmd}\' to install it.')
     if tool.version_in_path and tool.version_in_path not in tool.versions:
@@ -2137,21 +2141,21 @@ def process_tool(
     return tool_export_paths, tool_export_vars, tool_found
 
 
-def check_python_venv_compatibility(idf_python_env_path: str, idf_version: str) -> None:
+def check_python_venv_compatibility(sdk_python_env_path: str, sdk_version: str) -> None:
     try:
-        with open(os.path.join(idf_python_env_path, VENV_VER_FILE), 'r', encoding='utf-8') as f:
-            read_idf_version = f.read().strip()
-        if read_idf_version != idf_version:
-            fatal(f'Python environment is set to {idf_python_env_path} which was generated for '
-                  f'ESP-IDF {read_idf_version} instead of the current {idf_version}. '
+        with open(os.path.join(sdk_python_env_path, VENV_VER_FILE), 'r', encoding='utf-8') as f:
+            read_sdk_version = f.read().strip()
+        if read_sdk_version != sdk_version:
+            fatal(f'Python environment is set to {sdk_python_env_path} which was generated for '
+                  f'SiFli-SDK {read_sdk_version} instead of the current {sdk_version}. '
                   'The issue can be solved by (1) removing the directory and re-running the install script, '
-                  'or (2) unsetting the IDF_PYTHON_ENV_PATH environment variable, or (3) '
-                  're-runing the install script from a clean shell where an ESP-IDF environment is '
+                  'or (2) unsetting the SIFLI_SDK_PYTHON_ENV_PATH environment variable, or (3) '
+                  're-runing the install script from a clean shell where an SiFli-SDK environment is '
                   'not active.')
             raise SystemExit(1)
     except OSError as e:
         # perhaps the environment was generated before the support for VENV_VER_FILE was added
-        warn(f'The following issue occurred while accessing the ESP-IDF version file in the Python environment: {e}. '
+        warn(f'The following issue occurred while accessing the SiFli-SDK version file in the Python environment: {e}. '
              '(Diagnostic information. It can be ignored.)')
 
 
@@ -2160,7 +2164,7 @@ def action_export(args: Any) -> None:
     Exports all necessary environment variables and paths needed for tools used.
     """
     if args.deactivate:
-        if different_idf_detected():
+        if different_sdk_detected():
             print_deactivate_statement(args)
         return
 
@@ -3168,7 +3172,7 @@ def main(argv: List[str]) -> None:
                                     action='store_true')
     install_python_env.add_argument('--extra-wheels-dir', help=('Additional directories with wheels '
                                                                 'to use during installation'))
-    install_python_env.add_argument('--extra-wheels-url', help='Additional URL with wheels', default=IDF_PIP_WHEELS_URL)
+    install_python_env.add_argument('--extra-wheels-url', help='Additional URL with wheels', default=SIFLI_SDK_PIP_WHEELS_URL)
     install_python_env.add_argument('--no-index', help='Work offline without retrieving wheels index')
     install_python_env.add_argument('--features', default='core', help=('A comma separated list of desired features for installing. '
                                                                         'It defaults to installing just the core functionality.'))
