@@ -266,6 +266,16 @@ menuconfig SENSOR_USING_ASL
                 string "TSL2572 I2C BUS"
                 default "i2c4"
             endif
+        
+        menuconfig ASL_USING_LTR303
+            bool "LTR303"
+            select RT_USING_SENSOR
+            default n
+            if ASL_USING_LTR303
+                config LTR303_I2C_NAME
+                string "LTR303 I2C BUS"
+                default "i2c4"
+            endif
     endif
 	
 menuconfig SENSOR_USING_MPU6050
