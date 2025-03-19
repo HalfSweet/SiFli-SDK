@@ -46,7 +46,6 @@
  */
 
 #include "LTR303.h"
-#include <cstdint>
 #include <rtthread.h>
 #include "board.h"
 
@@ -98,9 +97,8 @@ Info:
 ******************************************************************************/
 static uint8_t LTR303_Read_Byte(uint8_t Addr)
 {
-    //Addr = Addr | COMMAND_BIT;
     struct rt_i2c_msg msgs[2];
-    uint8_t RegAddr = Addr | COMMAND_BIT;
+    uint8_t RegAddr = Addr;
     uint8_t value = 0;
     uint32_t res;
 
@@ -136,7 +134,7 @@ static uint32_t LTR303_Read_Word(uint8_t Addr)
 {
     //Addr = Addr | COMMAND_BIT;
     struct rt_i2c_msg msgs[2];
-    uint8_t RegAddr = Addr | COMMAND_BIT;
+    uint8_t RegAddr = Addr;
     uint32_t value = 0;
     uint8_t buf[4];
     uint32_t res;
@@ -160,7 +158,7 @@ static uint32_t LTR303_Read_Word(uint8_t Addr)
         }
     }
 
-    value = (bfu[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
+    value = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
     return value;
 }
 
@@ -180,7 +178,7 @@ static void LTR303_Write_Byte(uint8_t Addr, uint8_t Value)
 
     if (LTR303_bus)
     {
-        value[0] = Addr | COMMAND_BIT;
+        value[0] = Addr;
         value[1] = Value;
 
         msgs[0].addr  = LTR303_ADDRESS;    /* Slave address */
@@ -227,7 +225,7 @@ ltr303_gain_t LTR303_GetGain(void)
     return LTR303_Gain;
 }
 
-void LT303_SetIntegrationTime(ltr303_time_t Time)
+void LT303_SetIntegrationTime(ltr303_integrationtime_t Time)
 {
     uint8_t Reg = LTR303_Read_Byte(LTR303_MEAS_RATE);
     // Time(5:3)
@@ -236,7 +234,7 @@ void LT303_SetIntegrationTime(ltr303_time_t Time)
     LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
 }
 
-ltr303_time_t LTR303_GetIntegrationTime(void)
+ltr303_integrationtime_t LTR303_GetIntegrationTime(void)
 {
     uint8_t data;
     data = LTR303_Read_Byte(LTR303_MEAS_RATE);
@@ -244,7 +242,7 @@ ltr303_time_t LTR303_GetIntegrationTime(void)
     return LTR303_Time;
 }
 
-void LT303_SetMeasurementRate(ltr303_rate_t Rate)
+void LT303_SetMeasurementRate(ltr303_measurerate_t Rate)
 {
     uint8_t Reg = LTR303_Read_Byte(LTR303_MEAS_RATE);
     // Rate(2:0)
@@ -253,7 +251,7 @@ void LT303_SetMeasurementRate(ltr303_rate_t Rate)
     LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
 }
 
-ltr303_rate_t LTR303_GetMeasurementRate(void)
+ltr303_measurerate_t LTR303_GetMeasurementRate(void)
 {
     uint8_t data;
     data = LTR303_Read_Byte(LTR303_MEAS_RATE);

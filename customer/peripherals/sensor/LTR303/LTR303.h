@@ -1,8 +1,8 @@
 #ifndef _LTR303_H_
 #define _LTR303_H_
 
-#include <cstdint>
 #include <stdint.h>
+#include "rtthread.h"
 
 #define LTR303_ADDRESS 0x29 // default address
 
