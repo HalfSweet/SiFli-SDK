@@ -88,174 +88,84 @@ int LTR303_I2C_Init()
     return 0;
 }
 
-
-/******************************************************************************
-function:   Read one byte of data to LTR303 via I2C
-parameter:
-            Addr: Register address
-Info:
-******************************************************************************/
-static uint8_t LTR303_Read_Byte(uint8_t Addr)
-{
-    struct rt_i2c_msg msgs[2];
-    uint8_t RegAddr = Addr;
-    uint8_t value = 0;
-    uint32_t res;
-
-    if (LTR303_bus)
-    {
-        msgs[0].addr  = LTR303_ADDRESS;    /* Slave address */
-        msgs[0].flags = RT_I2C_WR;        /* Write flag */
-        msgs[0].buf   = &RegAddr;         /* Slave register address */
-        msgs[0].len   = 1;                /* Number of bytes sent */
-
-        msgs[1].addr  = LTR303_ADDRESS;    /* Slave address */
-        msgs[1].flags = RT_I2C_RD;        /* Read flag */
-        msgs[1].buf   = &value;             /* Read data pointer */
-        msgs[1].len   = 1;              /* Number of bytes read */
-
-        res = rt_i2c_transfer(LTR303_bus, msgs, 2);
-        if (res != 2)
-        {
-            LOG_I("LTR303_Read_Byte fail with res %d\n", res);
-        }
-    }
-
-    return value;
-}
-
-/******************************************************************************
-function:   Read one word of data to LTR303 via I2C
-parameter:
-            Addr: Register address
-Info:
-******************************************************************************/
-static uint32_t LTR303_Read_Word(uint8_t Addr)
-{
-    //Addr = Addr | COMMAND_BIT;
-    struct rt_i2c_msg msgs[2];
-    uint8_t RegAddr = Addr;
-    uint32_t value = 0;
-    uint8_t buf[4];
-    uint32_t res;
-
-    if (LTR303_bus)
-    {
-        msgs[0].addr  = LTR303_ADDRESS;    /* Slave address */
-        msgs[0].flags = RT_I2C_WR;        /* Write flag */
-        msgs[0].buf   = &RegAddr;         /* Slave register address */
-        msgs[0].len   = 1;                /* Number of bytes sent */
-
-        msgs[1].addr  = LTR303_ADDRESS;    /* Slave address */
-        msgs[1].flags = RT_I2C_RD;        /* Read flag */
-        msgs[1].buf   = buf;             /* Read data pointer */
-        msgs[1].len   = 4;              /* Number of bytes read */
-
-        res = rt_i2c_transfer(LTR303_bus, msgs, 2);
-        if (res != 2)
-        {
-            LOG_I("LTR303_Read_Byte fail with res %d\n", res);
-        }
-    }
-
-    value = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
-    return value;
-}
-
-/******************************************************************************
-function:   Send one byte of data to LTR303 via I2C
-parameter:
-            Addr: Register address
-           Value: Write to the value of the register
-Info:
-******************************************************************************/
-static void LTR303_Write_Byte(uint8_t Addr, uint8_t Value)
-{
-    //Addr = Addr | COMMAND_BIT;
-    struct rt_i2c_msg msgs[2];
-    uint8_t value[2];
-    uint32_t res;
-
-    if (LTR303_bus)
-    {
-        value[0] = Addr;
-        value[1] = Value;
-
-        msgs[0].addr  = LTR303_ADDRESS;    /* Slave address */
-        msgs[0].flags = RT_I2C_WR;        /* Write flag */
-        msgs[0].buf   = value;             /* Slave register address */
-        msgs[0].len   = 2;                /* Number of bytes sent */
-
-        res = rt_i2c_transfer(LTR303_bus, msgs, 1);
-        if (res != 1)
-        {
-            LOG_I("LTR303_Write_Byte FAIL %d\n", res);
-        }
-    }
-}
-
 void LTR303_PowerOn(void)
 {
-    uint8_t Reg = LTR303_Read_Byte(LTR303_ALS_CTRL);
-    Reg |= 0x01;
-    LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    uint8_t Reg[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
+    Reg[0] |= 0x01;
+    rt_kprintf("LTR303_ALS_CTRL Reg[0] = %d\n", Reg[0]);
+    RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
+
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
+    rt_kprintf("LTR303_ALS_CTRL Set Reg[0] = %d\n", Reg[0]);
 }
 
 void LTR303_PowerOff(void)
 {
-    uint8_t Reg = LTR303_Read_Byte(LTR303_ALS_CTRL);
-    Reg &= 0xfe;
-    LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    uint8_t Reg[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
+    Reg[0] &= 0xfe;
+    RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 }
 
 void LTR303_SetGain(ltr303_gain_t Gain)
 {
-    uint8_t Reg = LTR303_Read_Byte(LTR303_ALS_CTRL);
+    uint8_t Reg[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
     // Gain(4:2)
-    Reg &= 0xe3;
-    Reg |= (Gain << 2);
-    LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    Reg[0] &= 0xe3;
+    Reg[0] |= (Gain << 2);
+    RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 }
 
 ltr303_gain_t LTR303_GetGain(void)
 {
-    uint8_t data;
-    data = LTR303_Read_Byte(LTR303_ALS_CTRL);
-    uint8_t LTR303_Gain = (data & 0x1c) >> 2;
+    uint8_t data[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, data, 1) > 0);
+    uint8_t LTR303_Gain = (data[0] & 0x1c) >> 2;
     return LTR303_Gain;
 }
 
 void LT303_SetIntegrationTime(ltr303_integrationtime_t Time)
 {
-    uint8_t Reg = LTR303_Read_Byte(LTR303_MEAS_RATE);
+    uint8_t Reg[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_MEAS_RATE, 8, Reg, 1) > 0);
+    rt_kprintf("LTR303_MEAS_RATE Reg[0] = %d\n", Reg[0]);
     // Time(5:3)
-    Reg &= 0xc7;
-    Reg |= (Time << 3);
-    LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    Reg[0] &= 0xc7;
+    Reg[0] |= (Time << 3);
+    RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 }
 
 ltr303_integrationtime_t LTR303_GetIntegrationTime(void)
 {
-    uint8_t data;
-    data = LTR303_Read_Byte(LTR303_MEAS_RATE);
-    uint8_t LTR303_Time = (data & 0x38) >> 3;
+    uint8_t data[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_MEAS_RATE, 8, data, 1) > 0);
+    uint8_t LTR303_Time = (data[0] & 0x38) >> 3;
     return LTR303_Time;
 }
 
 void LT303_SetMeasurementRate(ltr303_measurerate_t Rate)
 {
-    uint8_t Reg = LTR303_Read_Byte(LTR303_MEAS_RATE);
+    // uint8_t Reg = LTR303_Read_Byte(LTR303_MEAS_RATE);
+    // // Rate(2:0)
+    // Reg &= 0xf8;
+    // Reg |= Rate;
+    // LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    uint8_t Reg[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_MEAS_RATE, 8, Reg, 1) > 0);
     // Rate(2:0)
-    Reg &= 0xf8;
-    Reg |= Rate;
-    LTR303_Write_Byte(LTR303_ALS_CTRL, Reg);
+    Reg[0] &= 0xf8;
+    Reg[0] |= Rate;
+    rt_kprintf("Reg[0] = %d\n", Reg[0]);
+    RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 }
 
 ltr303_measurerate_t LTR303_GetMeasurementRate(void)
 {
-    uint8_t data;
-    data = LTR303_Read_Byte(LTR303_MEAS_RATE);
-    uint8_t LTR303_Rate = data & 0x07;
+    uint8_t data[1];
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_MEAS_RATE, 8, data, 1) > 0);
+    uint8_t LTR303_Rate = data[0] & 0x07;
     return LTR303_Rate;
 }
 
@@ -272,9 +182,10 @@ rt_err_t LTR303_Init()
 
 uint16_t LTR303_ReadVisible(void)
 {
-    uint32_t data;
-    data = LTR303_Read_Word(LTR303_CH1DATA);
-    return data >> 16;
+    uint8_t data[4] = {1,2,3,4};
+    RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_CH1DATA, 8, data, 4) > 0);
+    rt_kprintf("data[0] = %d, data[1] = %d, data[2] = %d, data[3] = %d\n", data[0], data[1], data[2], data[3]);
+    return ((data[1] << 8) | data[0]);
 }
 
 
