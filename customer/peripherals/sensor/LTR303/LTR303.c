@@ -71,7 +71,7 @@ int DEV_Digital_Read(uint8_t pin)
 }
 
 // i2c bus initial
-int LTR303_I2C_Init()
+static int LTR303_I2C_Init()
 {
     /* get i2c bus device */
     LTR303_bus = rt_i2c_bus_device_find(LTR303_I2C_NAME);
@@ -93,11 +93,9 @@ void LTR303_PowerOn(void)
     uint8_t Reg[1];
     RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
     Reg[0] |= 0x01;
-    rt_kprintf("LTR303_ALS_CTRL Reg[0] = %d\n", Reg[0]);
     RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 
     RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
-    rt_kprintf("LTR303_ALS_CTRL Set Reg[0] = %d\n", Reg[0]);
 }
 
 void LTR303_PowerOff(void)
@@ -157,7 +155,6 @@ void LT303_SetMeasurementRate(ltr303_measurerate_t Rate)
     // Rate(2:0)
     Reg[0] &= 0xf8;
     Reg[0] |= Rate;
-    rt_kprintf("Reg[0] = %d\n", Reg[0]);
     RT_ASSERT(rt_i2c_mem_write(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_ALS_CTRL, 8, Reg, 1) > 0);
 }
 
@@ -184,7 +181,6 @@ uint16_t LTR303_ReadVisible(void)
 {
     uint8_t data[4] = {1,2,3,4};
     RT_ASSERT(rt_i2c_mem_read(LTR303_bus, LTR303_I2CADDR_DEFAULT, LTR303_CH1DATA, 8, data, 4) > 0);
-    rt_kprintf("data[0] = %d, data[1] = %d, data[2] = %d, data[3] = %d\n", data[0], data[1], data[2], data[3]);
     return ((data[1] << 8) | data[0]);
 }
 
