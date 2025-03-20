@@ -236,7 +236,6 @@ static rt_size_t _lsm6dsl_polling_get_data(rt_sensor_t sensor, struct rt_sensor_
         LSM6DSL_Axes_t acce;
 
         int ret = LSM6DSL_ACC_GetAxes(&lsm6dsl, &acce);
-        rt_kprintf("ret: %d\n", ret);
 
         data->type = RT_SENSOR_CLASS_ACCE;
         data->data.acce.x = acce.x;
