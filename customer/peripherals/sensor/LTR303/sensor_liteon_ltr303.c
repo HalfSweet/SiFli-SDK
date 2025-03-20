@@ -108,7 +108,7 @@ static rt_err_t ltr303_control(struct rt_sensor_device *sensor, int cmd, void *a
         }
         default:
         {
-            result = -RT_ERROR;
+            result = RT_EOK;
             break;
         }
     }
