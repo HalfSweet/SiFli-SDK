@@ -1242,8 +1242,8 @@ def PrepareBuilding(env, has_libcpu=False, remove_components = []):
                         default = False,
                         help = 'make menuconfig for RT-Thread BSP')
         if GetOption('menuconfig'):
-            from menuconfig import menuconfig
-            menuconfig(Rtt_Root)
+            board = f"--board={GetOption('board')}"
+            subprocess.call([sys.executable, os.path.join(SIFLI_SDK, 'tools',"kconfig" , 'menuconfig.py'), board])
             exit(0)
 
     if not option_added:
