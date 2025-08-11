@@ -322,4 +322,6 @@
 #define CONFIG_USB_HS
 #endif
 
+#define CONFIG_USB_MUSB_EP_NUM 8
+
 #endif

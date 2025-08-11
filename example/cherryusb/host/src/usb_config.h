@@ -144,6 +144,9 @@
 #define CONFIG_USBDEV_RNDIS_USING_LWIP
 #define CONFIG_USBDEV_CDC_ECM_USING_LWIP
 
+#define CONFIG_USB_MUSB_PIPE_NUM 8
+#define CONFIG_USB_MUSB_WITHOUT_MULTIPOINT 1
+
 /* ================ USB HOST Stack Configuration ================== */
 
 #define CONFIG_USBHOST_MAX_RHPORTS          1
