@@ -15,3 +15,6 @@ Kconfig.tmp
 _*/
 **/packages/
 .project.toml
+# Allow tracking everything under tools/build
+!tools/build/
+!tools/build/**
