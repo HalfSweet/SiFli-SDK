@@ -503,14 +503,13 @@ def LdsBuild(target, source, env):
     f.close()   
 
 def FsBuild(target, source, env):
-    import json
     import rtconfig
     
-    f = open(env['PARTITION_TABLE'])
-    try:
-        mems = json.load(f)
-    finally:
-        f.close()
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None:
+        import ptab as _ptab
+        ptab_obj = _ptab.load_ptab(env['PARTITION_TABLE'], fatal=True)
+    mems = ptab_obj.content_mems()
         
     found=0
     for mem in mems:
@@ -535,6 +534,8 @@ def FsBuild(target, source, env):
 
 def ModifyLdsTargets(target, source, env):
     target = [os.path.join(env['build_dir'], 'link_copy.lds')]
+    if 'PTAB_HEADER' in env:
+        env.Depends(target, env['PTAB_HEADER'])
     
     return target, source
 
@@ -1277,6 +1278,9 @@ def PrepareBuilding(env, has_libcpu=False, remove_components=[], buildlib=None):
         path = [Env['BSP_ROOT']]
 
     DefineGroup("Kernel", [], [], CPPPATH=path)
+
+    # register ptab tool
+    env.Tool('ptab', toolpath=[os.path.dirname(__file__)])
 
 
     # add font converter builder
