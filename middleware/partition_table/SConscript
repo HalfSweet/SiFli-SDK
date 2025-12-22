@@ -1,7 +1,6 @@
 from building import *
 Import('rtconfig')
 import os
-import resource
 import logging
 cwd = GetCurrentDir()
 env = GetCurrentEnv()
@@ -38,7 +37,8 @@ if GetDepend('USING_PARTITION_TABLE'):
             env['PARTITION_TABLE'] = src_file
             output_dir = os.path.join(env['BSP_ROOT'], './linker_scripts')    
 
-    resource.GenPartitionTableHeaderFile(src_file, output_dir, 'ptab')
+    ptab_header = env.PtabHeader(os.path.join(output_dir, 'ptab.h'), File(src_file))
+    env['PTAB_HEADER'] = ptab_header
 
 group = []
     
