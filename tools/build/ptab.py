@@ -1,10 +1,25 @@
+from __future__ import annotations
+
 import copy
 import json
 import logging
 import os
+import re
 from collections import OrderedDict
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import yaml
 
 _PTAB_CACHE = {}
+
+# SiliconSchema paths
+_SILICON_SCHEMA_PATH = Path(__file__).parent.parent / 'SiliconSchema' / 'common'
+_MPI_CONFIG_PATH = _SILICON_SCHEMA_PATH / 'mpi'
+_RAM_CONFIG_PATH = _SILICON_SCHEMA_PATH / 'ram'
+
+# Chip config cache
+_CHIP_CONFIG_CACHE = {}
 
 
 class Ptab:
@@ -30,6 +45,9 @@ class Ptab:
     def is_v2(self):
         return self.version == "2"
 
+    def is_v3(self):
+        return False
+
     def content_mems(self, clone=True):
         mems = self.mems[1:] if self._has_header else self.mems
         return copy.deepcopy(mems) if clone else mems
@@ -41,30 +59,456 @@ class Ptab:
         return mems
 
 
+class PtabV3:
+    """ptab v3 格式解析器，使用 YAML 格式"""
+
+    def __init__(self, path, data):
+        self.path = os.path.abspath(path)
+        self._data = data
+        self._version = str(data.get('version', '3'))
+        self._chip = data.get('chip', '')
+        self._partitions = data.get('partitions', [])
+        self._memory = data.get('memory', [])  # 外部存储配置
+        self._chip_config = None
+
+    @property
+    def version(self):
+        return self._version
+
+    @property
+    def chip(self):
+        return self._chip
+
+    @property
+    def memory(self):
+        return copy.deepcopy(self._memory)
+
+    @property
+    def chip_series(self):
+        """获取芯片系列名（小写），如 'sf32lb52'"""
+        if self._chip:
+            # SF32LB52 -> sf32lb52, SF32LB525UC6 -> sf32lb52
+            match = re.match(r'(SF32LB\d{2})', self._chip, re.IGNORECASE)
+            if match:
+                return match.group(1).lower()
+        return None
+
+    @property
+    def partitions(self):
+        return copy.deepcopy(self._partitions)
+
+    def is_v2(self):
+        return False
+
+    def is_v3(self):
+        return True
+
+    def get_chip_config(self):
+        """获取芯片配置（MPI + RAM + Memory）
+        
+        合并以下来源：
+        1. 基础 MPI/RAM 配置（从 SiliconSchema 加载）
+        2. 芯片型号的 SiP memory（从 chip.yaml 获取）
+        3. ptab.yaml 中的 memory 字段（外部存储）
+        """
+        if self._chip_config is None:
+            series = self.chip_series
+            if series:
+                self._chip_config = load_chip_config(series)
+            else:
+                self._chip_config = {'mpi': {}, 'ram': {}}
+            
+            # 合并芯片型号的 SiP memory 和 ptab.yaml 的 memory 配置
+            self._chip_config = self._merge_memory_config(self._chip_config)
+        return self._chip_config
+
+    def _merge_memory_config(self, config):
+        """合并 memory 配置到 chip_config
+        
+        将 ptab.yaml 的 memory 字段和 chip.yaml 的 variant memory 合并到 mpi 配置中。
+        memory 字段用于描述每个 mpi 上挂载的存储器类型和大小。
+        """
+        import copy
+        config = copy.deepcopy(config)
+        
+        # 初始化 memory_info 存储每个 mpi 的存储器信息
+        if 'memory_info' not in config:
+            config['memory_info'] = {}
+        
+        # 加载芯片型号的 SiP memory 配置
+        chip_memory = self._load_chip_variant_memory()
+        for mem in chip_memory:
+            mpi = mem.get('mpi')
+            if mpi:
+                config['memory_info'][mpi] = {
+                    'type': mem.get('type', 'unknown'),
+                    'size': mem.get('size', 0),
+                    'sip': True,
+                }
+        
+        # 合并 ptab.yaml 中的 memory 字段（外部存储，覆盖 SiP）
+        for mem in self._memory:
+            mpi = mem.get('mpi')
+            if mpi:
+                config['memory_info'][mpi] = {
+                    'type': mem.get('type', 'unknown'),
+                    'size': parse_size(mem.get('size', 0)),
+                    'sip': False,
+                }
+        
+        return config
+
+    def _load_chip_variant_memory(self):
+        """从 chip.yaml 加载精确芯片型号的 memory 配置"""
+        if not self._chip:
+            return []
+        
+        # 查找芯片定义文件
+        series = self.chip_series
+        if not series:
+            return []
+        
+        chip_file = Path(__file__).parent.parent / 'SiliconSchema' / 'chips' / f'{series.upper()}x' / 'chip.yaml'
+        if not chip_file.exists():
+            return []
+        
+        try:
+            with open(chip_file) as f:
+                chip_data = yaml.safe_load(f)
+        except Exception:
+            return []
+        
+        # 在 variants 中查找匹配的型号
+        variants = chip_data.get('variants', [])
+        for variant in variants:
+            if variant.get('part_number', '').upper() == self._chip.upper():
+                return variant.get('memory', [])
+        
+        return []
+
+    def content_mems(self, clone=True):
+        """转换为 v1/v2 兼容的 mems 格式，用于向后兼容"""
+        return self._convert_to_mems(clone)
+
+    def _convert_to_mems(self, clone=True):
+        """将 v3 partitions 转换为 v2 mems 格式"""
+        chip_config = self.get_chip_config()
+        mems_dict = OrderedDict()
+
+        for partition in self._partitions:
+            region = partition.get('region', '')
+            if not region:
+                continue
+
+            # 获取 region 基地址
+            sbus_addr, _ = resolve_region_address(region, 0, chip_config)
+            mem_name = region
+
+            if mem_name not in mems_dict:
+                mems_dict[mem_name] = {
+                    'mem': mem_name,
+                    'base': '0x{:08X}'.format(sbus_addr),
+                    'regions': []
+                }
+
+            # 转换分区
+            offset = parse_size(partition.get('offset', 0))
+            size = parse_size(partition.get('size', 0))
+            name = partition.get('name', '')
+            ptype = partition.get('type', '')
+            subtype = partition.get('subtype', '')
+
+            region_entry = {
+                'offset': '0x{:08X}'.format(offset),
+                'max_size': '0x{:08X}'.format(size),
+                'tags': [name.upper()] if name else [],
+                'name': name,
+            }
+
+            # 构建 type 列表
+            type_list = []
+            if ptype in ('bootloader', 'app'):
+                type_list.append('app_img')
+            if partition.get('exec_region') or partition.get('exec_offset') is not None:
+                type_list.append('app_exec')
+            if type_list:
+                region_entry['type'] = type_list
+
+            if partition.get('core'):
+                region_entry['core'] = partition['core']
+
+            mems_dict[mem_name]['regions'].append(region_entry)
+
+            # 如果有 exec_region，添加执行区域
+            exec_region = partition.get('exec_region')
+            if exec_region and exec_region != region:
+                exec_offset = parse_size(partition.get('exec_offset', 0))
+                exec_sbus_addr, _ = resolve_region_address(exec_region, 0, chip_config)
+
+                if exec_region not in mems_dict:
+                    mems_dict[exec_region] = {
+                        'mem': exec_region,
+                        'base': '0x{:08X}'.format(exec_sbus_addr),
+                        'regions': []
+                    }
+
+                exec_entry = {
+                    'offset': '0x{:08X}'.format(exec_offset),
+                    'max_size': '0x{:08X}'.format(size),
+                    'tags': [],
+                    'name': name,
+                    'type': ['app_exec']
+                }
+                if partition.get('core'):
+                    exec_entry['core'] = partition['core']
+                mems_dict[exec_region]['regions'].append(exec_entry)
+
+        mems = list(mems_dict.values())
+        return copy.deepcopy(mems) if clone else mems
+
+    def ensure_default_regions(self):
+        return self.content_mems()
+
+
+# ============================================================================
+# Size parsing utilities
+# ============================================================================
+
+_SIZE_UNITS = {
+    'kb': 1024,
+    'k': 1024,
+    'mb': 1024 * 1024,
+    'm': 1024 * 1024,
+    'gb': 1024 * 1024 * 1024,
+    'g': 1024 * 1024 * 1024,
+}
+
+
+def parse_size(value: Union[int, str]) -> int:
+    """解析大小值，支持多种格式
+
+    支持格式：
+    - 整数: 4096
+    - 十六进制字符串: "0x1000"
+    - 带单位字符串: "4KB", "4kb", "4K", "2MB"
+
+    Returns:
+        int: 字节数
+    """
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return int(value)
+
+    value = value.strip()
+    if not value:
+        return 0
+
+    # 十六进制
+    if value.lower().startswith('0x'):
+        return int(value, 16)
+
+    # 带单位
+    match = re.match(r'^(\d+)\s*([a-zA-Z]+)$', value)
+    if match:
+        num = int(match.group(1))
+        unit = match.group(2).lower()
+        if unit in _SIZE_UNITS:
+            return num * _SIZE_UNITS[unit]
+        raise ValueError(f"Unknown size unit: {match.group(2)}")
+
+    # 纯数字
+    return int(value)
+
+
+# ============================================================================
+# Chip configuration loading
+# ============================================================================
+
+def load_chip_config(chip_series: str) -> Dict[str, Any]:
+    """加载芯片 MPI + RAM 配置
+
+    Args:
+        chip_series: 芯片系列名，如 'sf32lb52', 'sf32lb56', 'sf32lb58'
+
+    Returns:
+        dict: {'mpi': {...}, 'ram': {...}}
+    """
+    if chip_series in _CHIP_CONFIG_CACHE:
+        return _CHIP_CONFIG_CACHE[chip_series]
+
+    config = {'mpi': {}, 'ram': {}}
+
+    # 加载 MPI 配置
+    mpi_file = _MPI_CONFIG_PATH / chip_series / 'mpi.yaml'
+    if mpi_file.exists():
+        with open(mpi_file) as f:
+            mpi_data = yaml.safe_load(f)
+            config['mpi'] = mpi_data.get('mpis', {})
+
+    # 加载 RAM 配置
+    ram_file = _RAM_CONFIG_PATH / chip_series / 'ram.yaml'
+    if ram_file.exists():
+        with open(ram_file) as f:
+            config['ram'] = yaml.safe_load(f)
+
+    _CHIP_CONFIG_CACHE[chip_series] = config
+    return config
+
+
+def resolve_region_address(
+    region: str,
+    offset: int,
+    chip_config: Dict[str, Any]
+) -> Tuple[int, int]:
+    """解析 region 到物理地址
+
+    Args:
+        region: region 名称，如 'mpi1', 'mpi2', 'hpsys_ram'
+        offset: 偏移量
+        chip_config: load_chip_config() 返回的配置
+
+    Returns:
+        tuple: (sbus_addr, cbus_addr)
+    """
+    mpi_config = chip_config.get('mpi', {})
+    ram_config = chip_config.get('ram', {})
+
+    # MPI region
+    if region in mpi_config:
+        mpi = mpi_config[region]
+        base_offset = mpi.get('base', {}).get('offset', 0)
+        sbus_addr = base_offset + offset
+        if 'xip' in mpi:
+            xip_offset = mpi['xip'].get('offset', 0)
+            cbus_addr = xip_offset + offset
+        else:
+            cbus_addr = sbus_addr
+        return sbus_addr, cbus_addr
+
+    # RAM region (hpsys_ram -> hpsys.ram)
+    if region == 'hpsys_ram' or region.startswith('hpsys'):
+        hpsys = ram_config.get('hpsys', {})
+        ram = hpsys.get('ram', {})
+        # 使用第一个 ram bank 的 hcpu offset 作为基地址
+        for bank_name, bank in ram.items():
+            hcpu = bank.get('hcpu', {})
+            base_offset = hcpu.get('offset', 0x20000000)
+            return base_offset + offset, base_offset + offset
+        # 默认值
+        return 0x20000000 + offset, 0x20000000 + offset
+
+    if region == 'lpsys_ram' or region.startswith('lpsys'):
+        lpsys = ram_config.get('lpsys', {})
+        ram = lpsys.get('ram', {})
+        for bank_name, bank in ram.items():
+            hcpu = bank.get('hcpu', {})
+            base_offset = hcpu.get('offset', 0x20400000)
+            return base_offset + offset, base_offset + offset
+        return 0x20400000 + offset, 0x20400000 + offset
+
+    # psram 别名处理：psram{x} 直接映射到 mpi{x}
+    # 用于 exec 的地址使用 xip 地址
+    psram_match = re.match(r'^psram(\d+)?$', region)
+    if psram_match:
+        # psram1 -> mpi1, psram2 -> mpi2, psram -> mpi1
+        mpi_num = psram_match.group(1) or '1'
+        mpi_name = f'mpi{mpi_num}'
+        if mpi_name in mpi_config:
+            mpi = mpi_config[mpi_name]
+            base_offset = mpi.get('base', {}).get('offset', 0)
+            sbus_addr = base_offset + offset
+            if 'xip' in mpi:
+                cbus_addr = mpi['xip'].get('offset', 0) + offset
+            else:
+                cbus_addr = sbus_addr
+            return sbus_addr, cbus_addr
+
+    logging.warning(f"Unknown region: {region}, using offset as address")
+    return offset, offset
+
+
 def _parse_ptab_file(path):
+    """解析 ptab 文件（JSON 格式）"""
     with open(path) as f:
         return json.load(f, object_pairs_hook=OrderedDict)
 
 
+def _parse_ptab_yaml_file(path):
+    """解析 ptab 文件（YAML 格式）"""
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def _is_yaml_file(path):
+    """检查是否为 YAML 文件"""
+    ext = os.path.splitext(path)[1].lower()
+    return ext in ('.yaml', '.yml')
+
+
+def _is_v3_yaml(data):
+    """检查是否为 v3 格式的 YAML"""
+    if isinstance(data, dict):
+        version = data.get('version')
+        if version is not None and str(version) == '3':
+            return True
+        # 如果有 partitions 字段，也认为是 v3
+        if 'partitions' in data:
+            return True
+    return False
+
+
 def load_ptab(path, fatal=False):
+    """加载 ptab 文件
+
+    支持格式：
+    - v1/v2: JSON 格式的 ptab.json
+    - v3: YAML 格式的 ptab.yaml
+
+    Args:
+        path: ptab 文件路径
+        fatal: 解析错误时是否终止程序
+
+    Returns:
+        Ptab 或 PtabV3 对象
+    """
     abspath = os.path.abspath(str(path))
+
     try:
         stat = os.stat(abspath)
         key = (abspath, stat.st_mtime_ns, stat.st_size)
         if key in _PTAB_CACHE:
             return _PTAB_CACHE[key]
-        mems = _parse_ptab_file(abspath)
-    except ValueError as e:
+
+        if _is_yaml_file(abspath):
+            # YAML 格式
+            data = _parse_ptab_yaml_file(abspath)
+            if _is_v3_yaml(data):
+                ptab_obj = PtabV3(abspath, data)
+            else:
+                # YAML 但不是 v3，转换为 v1/v2 兼容格式
+                if isinstance(data, list):
+                    ptab_obj = Ptab(abspath, data)
+                else:
+                    raise ValueError("Invalid YAML ptab format: expected dict with 'partitions' or list")
+        else:
+            # JSON 格式 (v1/v2)
+            mems = _parse_ptab_file(abspath)
+            ptab_obj = Ptab(abspath, mems)
+
+    except (ValueError, yaml.YAMLError) as e:
         if fatal:
-            print("ptab.json syntax error, might be caused by trailing comma of last item")
+            if _is_yaml_file(abspath):
+                print("ptab.yaml syntax error")
+            else:
+                print("ptab.json syntax error, might be caused by trailing comma of last item")
             print("Error message: {}".format(e))
             print("Please check file {}".format(abspath))
             raise SystemExit(1)
         raise
 
-    ptab = Ptab(abspath, mems)
-    _PTAB_CACHE[key] = ptab
-    return ptab
+    _PTAB_CACHE[key] = ptab_obj
+    return ptab_obj
 
 
 def _get_depend(name):

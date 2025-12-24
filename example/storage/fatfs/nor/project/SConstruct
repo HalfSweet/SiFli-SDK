@@ -26,8 +26,8 @@ objs = PrepareBuilding(None)
 env = GetCurrentEnv()
 
 # Add existing file system image bin
-# fs_bin=FileSystemBuild( "../disk", env)
-# AddCustomImg("fs_root",bin=[fs_bin])
+fs_bin=FileSystemBuild( "../disk", env)
+AddCustomImg("fs_root",bin=[fs_bin])
 
 # Build application.
 DoBuilding(TARGET, objs)

@@ -736,6 +736,167 @@ def GenPartitionTableHeaderContentV1(env, mems):
     return s
 
 
+def GenPartitionTableHeaderContentV3(env, ptab_obj):
+    """Generate ptab.h content for ptab v3
+
+    Args:
+        env: Build environment
+        ptab_obj: PtabV3 object
+
+    Address selection:
+    - Default: use XIP address (cbus_addr) for compatibility with v1/v2
+    - exec_region: for partitions with exec_region, the exec address uses cbus_addr
+    - accelerate: use accelerate partition's xip address as CODE_START_ADDR
+    """
+    s = ''
+    chip_config = ptab_obj.get_chip_config()
+    partitions = ptab_obj.partitions
+
+    # Find accelerate partition for CODE_START_ADDR
+    accelerate_partition = None
+    for p in partitions:
+        if p.get('type') == 'app' and p.get('subtype') == 'accelerate':
+            accelerate_partition = p
+            break
+
+    # Group partitions by region
+    region_groups = {}
+    for partition in partitions:
+        region = partition.get('region', '')
+        if region not in region_groups:
+            region_groups[region] = []
+        region_groups[region].append(partition)
+
+    for region, parts in region_groups.items():
+        s += MakeLine('')
+        s += MakeLine('')
+        s += MakeLine('/* {} */'.format(region))
+
+        for partition in parts:
+            name = partition.get('name', '')
+            if not name:
+                continue
+
+            offset = ptab.parse_size(partition.get('offset', 0))
+            size = ptab.parse_size(partition.get('size', 0))
+            ptype = partition.get('type', '')
+            subtype = partition.get('subtype', '')
+
+            # Get addresses
+            sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config)
+
+            # Select address based on memory type:
+            # - PSRAM/RAM/NAND: use base address (sbus_addr) - direct memory access
+            # - NOR Flash: use XIP address (cbus_addr) - execute in place
+            memory_info = chip_config.get('memory_info', {}).get(region, {})
+            mem_type = memory_info.get('type', '').lower()
+            
+            # PSRAM, RAM, and NAND types use base address
+            # Only NOR flash uses XIP address
+            if mem_type in ('psram', 'ram', 'nand') or subtype == 'ram':
+                use_addr = sbus_addr
+            else:
+                # Default to XIP address for NOR Flash
+                use_addr = cbus_addr
+
+            # Generate macros based on name
+            name_upper = name.upper()
+            start_addr_name = '{}_START_ADDR'.format(name_upper)
+            size_name = '{}_SIZE'.format(name_upper)
+            offset_name = '{}_OFFSET'.format(name_upper)
+
+            s += MakeLine('#undef  {}'.format(start_addr_name))
+            s += MakeLine('#define {:<50} (0x{:08X})'.format(start_addr_name, use_addr))
+            s += MakeLine('#undef  {}'.format(size_name))
+            s += MakeLine('#define {:<50} (0x{:08X})'.format(size_name, size))
+            s += MakeLine('#undef  {}'.format(offset_name))
+            s += MakeLine('#define {:<50} (0x{:08X})'.format(offset_name, offset))
+
+            # Handle exec_region - generate code execution address macros
+            exec_region = partition.get('exec_region')
+            if exec_region:
+                exec_offset = ptab.parse_size(partition.get('exec_offset', 0))
+                exec_sbus_addr, exec_cbus_addr = ptab.resolve_region_address(exec_region, exec_offset, chip_config)
+
+                # Bootloader uses FLASH_BOOT_LOADER_* naming for compatibility
+                if ptype == 'bootloader':
+                    code_start_name = 'FLASH_BOOT_LOADER_START_ADDR'
+                    code_size_name = 'FLASH_BOOT_LOADER_SIZE'
+                    code_offset_name = 'FLASH_BOOT_LOADER_OFFSET'
+                else:
+                    code_start_name = 'APP_{}_CODE_START_ADDR'.format(name_upper)
+                    code_size_name = 'APP_{}_CODE_SIZE'.format(name_upper)
+                    code_offset_name = 'APP_{}_CODE_OFFSET'.format(name_upper)
+
+                # Determine exec address based on memory type
+                exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
+                exec_mem_type = exec_memory_info.get('type', '').lower()
+                
+                # PSRAM uses XIP for code execution (like NOR flash)
+                # Only RAM and NAND use base address for execution
+                if exec_mem_type in ('ram', 'nand'):
+                    exec_use_addr = exec_sbus_addr
+                else:
+                    # PSRAM, NOR, and other types use XIP for execution
+                    exec_use_addr = exec_cbus_addr
+                
+                s += MakeLine('#undef  {}'.format(code_start_name))
+                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_start_name, exec_use_addr))
+                s += MakeLine('#undef  {}'.format(code_size_name))
+                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_size_name, size))
+                s += MakeLine('#undef  {}'.format(code_offset_name))
+                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_offset_name, exec_offset))
+
+            # Handle type=app + subtype=accelerate - as CODE_START_ADDR
+            # accelerate partition address depends on memory type
+            if ptype == 'app' and subtype == 'accelerate':
+                # Use base address for NAND, XIP for NOR
+                if mem_type == 'nand':
+                    accelerate_use_addr = sbus_addr
+                else:
+                    accelerate_use_addr = cbus_addr
+                    
+                s += MakeLine('#undef  CODE_START_ADDR')
+                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_START_ADDR', accelerate_use_addr))
+                s += MakeLine('#undef  CODE_SIZE')
+                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_SIZE', size))
+
+            # Handle XIP execution for main/factory partition (no exec_region, no accelerate)
+            # In this case, main partition's XIP address is CODE_START_ADDR
+            is_main_app = (ptype == 'app' and subtype == 'factory') or name in ('main', 'hcpu_flash_code')
+            if is_main_app and not exec_region and not accelerate_partition:
+                s += MakeLine('#define {:<50} ({})'.format('CODE_START_ADDR', start_addr_name))
+                s += MakeLine('#define {:<50} ({})'.format('CODE_SIZE', size_name))
+
+            # Handle type=data + filesystem subtypes - generate FS_REGION_* macros for compatibility
+            fs_subtypes = ('littlefs', 'fat', 'fatfs', 'flashdb', 'filesystem')
+            if ptype == 'data' and subtype in fs_subtypes:
+                s += MakeLine('#undef  FS_REGION_START_ADDR')
+                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_START_ADDR', cbus_addr))
+                s += MakeLine('#undef  FS_REGION_SIZE')
+                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_SIZE', size))
+                s += MakeLine('#undef  FS_REGION_OFFSET')
+                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_OFFSET', offset))
+
+            # Handle attrs custom macros
+            attrs = partition.get('attrs', {})
+            if isinstance(attrs, dict):
+                for key, value in attrs.items():
+                    if isinstance(value, int):
+                        s += MakeLine('#undef  {}'.format(key))
+                        s += MakeLine('#define {:<50} (0x{:08X})'.format(key, value))
+
+            # Handle rom_index deprecation warning
+            rom_index = partition.get('rom_index')
+            if rom_index is not None:
+                logging.warning(
+                    "Partition '{}' uses deprecated 'rom_index'. "
+                    "Please migrate to name-based section naming.".format(name)
+                )
+
+    return s
+
+
 def GenPartitionTableHeaderFile(src, output_dir, output_name, env=None):
     import building
     import rtconfig
@@ -745,16 +906,19 @@ def GenPartitionTableHeaderFile(src, output_dir, output_name, env=None):
         env = building.GetCurrentEnv()
 
     ptab_obj = ptab.load_ptab(src, fatal=True)
-    mems = ptab_obj.content_mems()
     InitIndentation()
     s = MakeLine('#ifndef __{}__H__'.format(output_name.upper()))
     s += MakeLine('#define __{}__H__'.format(output_name.upper()))
     s += MakeLine('')
     s += MakeLine('')
 
-    if ptab_obj.is_v2():
+    if ptab_obj.is_v3():
+        s += GenPartitionTableHeaderContentV3(env, ptab_obj)
+    elif ptab_obj.is_v2():
+        mems = ptab_obj.content_mems()
         s += GenPartitionTableHeaderContentV2(env, mems)
     else:
+        mems = ptab_obj.content_mems()
         s += GenPartitionTableHeaderContentV1(env, mems)
 
     s += MakeLine('')
@@ -1185,6 +1349,45 @@ def ConstructImgDownloadInfoV1(img_download_info, mems):
                     img_download_info[proj_name][img_name[1]] = start_addr
 
 
+def ConstructImgDownloadInfoV3(img_download_info, ptab_obj):
+    chip_config = ptab_obj.get_chip_config()
+
+    for partition in ptab_obj.partitions:
+        name = partition.get('name', '')
+        ptype = partition.get('type', '')
+        region = partition.get('region', '')
+        offset = ptab.parse_size(partition.get('offset', 0))
+
+        sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config)
+
+        # Select download address based on memory type:
+        # - NAND: use base address (sbus_addr) for direct flash access
+        # - NOR: use XIP address (cbus_addr) for traditional XIP flash
+        # - PSRAM/RAM: use base address (sbus_addr)
+        memory_info = chip_config.get('memory_info', {}).get(region, {})
+        mem_type = memory_info.get('type', '').lower()
+        
+        if mem_type in ('nand', 'psram', 'ram'):
+            download_addr = sbus_addr
+        else:
+            # Default to XIP address for NOR Flash
+            download_addr = cbus_addr
+
+        if ptype == 'ftab':
+            img_download_info['ftab'] = download_addr
+            continue
+
+        if ptype not in ('app', 'bootloader'):
+            continue
+
+        img_download_info[name] = download_addr
+        
+        # Add 'main' alias for factory app (env['name'] is usually 'main')
+        subtype = partition.get('subtype', '')
+        if ptype == 'app' and subtype == 'factory':
+            img_download_info['main'] = download_addr
+
+
 def BuildJLinkLoadScript(main_env):
     import building
 
@@ -1192,10 +1395,16 @@ def BuildJLinkLoadScript(main_env):
     # example1:  {"main": 0x18000000}
     # example1:  {"main": {"ROM1.bin": 0x18000000, "ROM2.bin": 0x18200000}}
     img_download_info = {}
+    is_ptab_v3 = False
+
     if 'PARTITION_TABLE' in main_env:
         ptab_obj = ptab.load_ptab(main_env['PARTITION_TABLE'], fatal=True)
         mems = ptab_obj.content_mems()
-        if ptab_obj.is_v2():
+
+        if ptab_obj.is_v3():
+            is_ptab_v3 = True
+            ConstructImgDownloadInfoV3(img_download_info, ptab_obj)
+        elif ptab_obj.is_v2():
             ConstructImgDownloadInfoV2(img_download_info, mems)
         else:
             ConstructImgDownloadInfoV1(img_download_info, mems)
@@ -1275,6 +1484,21 @@ def BuildJLinkLoadScript(main_env):
                 s_file += MakeLine('FILE{}={}'.format(s_num,os.path.relpath(hex_file, work_dir)))
                 s_file += MakeLine('ADDR{}=0x{:08X}'.format(s_num,0XFFFFFFFF))
                 s_num += 1
+
+    # Process ftab.bin separately (not the project, but the directly generated binary file)
+    if is_ptab_v3 and 'ftab' in img_download_info:
+        ftab_bin_path = os.path.join(work_dir, 'ftab.bin')
+        if os.path.exists(ftab_bin_path):
+            ftab_addr = img_download_info['ftab']
+            s += MakeLine('loadbin {} 0x{:08X}'.format('ftab.bin', ftab_addr))
+            download_file.append({
+                'name': 'ftab.bin',
+                'addr': ftab_addr
+            })
+            s_file += MakeLine('FILE{}={}'.format(s_num, 'ftab.bin'))
+            s_file += MakeLine('ADDR{}=0x{:08X}'.format(s_num, ftab_addr))
+            s_num += 1
+
 
     custom_img_list = building.GetCustomImgList()
     

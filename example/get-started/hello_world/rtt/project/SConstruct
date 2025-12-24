@@ -28,7 +28,7 @@ env = GetCurrentEnv()
 DoBuilding(TARGET, objs)
 
 # Add flash table buld.
-AddFTAB(SIFLI_SDK,rtconfig.CHIP)
+AddFTAB(SIFLI_SDK,rtconfig.CHIP, env)
 
 # Generate download .bat script
 GenDownloadScript(env)
