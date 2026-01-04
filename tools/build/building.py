@@ -492,15 +492,37 @@ def ProgramAsmBuild(target, source, env):
     
 def LdsBuild(target, source, env):
     import rtconfig
+    import ptab as ptab_module
+
+    # Detect ptab version
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    target_path = str(target[0])
+
+    if ptab_obj and ptab_obj.is_v3():
+        # v3: Jinja2-only rendering (no gcc -E)
+        import gen_link_lds
+
+        build_dir = os.path.dirname(os.path.abspath(target_path))
+        rtconfig_h_path = os.path.join(build_dir, 'rtconfig.h')
+        rtconfig_defines = gen_link_lds._parse_rtconfig_defines(rtconfig_h_path)
+        defines = gen_link_lds.compute_link_defines(
+            ptab_obj,
+            env.get('name', 'main'),
+            getattr(rtconfig, 'CORE', 'HCPU'),
+            rtconfig_defines,
+        )
+        gen_link_lds.render_link_lds(str(source[0]), target_path, defines)
+        return
+
+    # v1/v2: legacy gcc -E preprocessing
     include_paths = ['-I{}'.format(path.replace('\\', '/')) for path in env['CPPPATH']]
-
-    target_path = os.path.join(os.path.dirname(str(target[0])), 'link_copy.lds')
-
     p = subprocess.Popen([rtconfig.CC, '-E', '-P'] + include_paths + ['-x', 'c', str(source[0])], stdout=subprocess.PIPE)
     (result, error) = p.communicate()
-    f = open(target_path, "wb")
-    f.write(result)
-    f.close()   
+    with open(target_path, "wb") as f:
+        f.write(result)
 
 def FsBuild(target, source, env):
     import rtconfig
@@ -533,10 +555,26 @@ def FsBuild(target, source, env):
         subprocess.run([env['fs_mkimg'],env['fs_root'],target,str(page_number),str(page_size)], check=True)
 
 def ModifyLdsTargets(target, source, env):
+    import ptab as ptab_module
+
     target = [os.path.join(env['build_dir'], 'link_copy.lds')]
     if 'PTAB_HEADER' in env:
         env.Depends(target, env['PTAB_HEADER'])
-    
+
+    # v3 requires Jinja2 template (link.jinja2), and must not fallback to gcc -E
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    if ptab_obj and ptab_obj.is_v3():
+        src0 = str(source[0]) if source else ''
+        base, ext = os.path.splitext(src0)
+        template_path = base + '.jinja2'
+        if not os.path.exists(template_path):
+            logging.error(f"ptab v3 requires jinja2 link template: {template_path}")
+            raise SystemExit(1)
+        source = [File(template_path)]
+
     return target, source
 
 def EmbeddedImgCFileBuild(target, source, env):
@@ -554,15 +592,121 @@ def EmbeddedImgCFileBuild(target, source, env):
         shutil.move(os.path.join(target_path, 'lcpu_img.c'), str(target[0]))
 
 
-
 def FtabCFileBuild(target, source, env):
     import resource
+    import ptab as ptab_module
+
     src_file = str(source[0])
     target_file = str(target[0])
+
     if 'template' in os.path.splitext(src_file)[1]:
         shutil.copy(src_file, target_file)
     else:
-        resource.GenFtabCFile(src_file, target_file, env['IMGS_INFO'])       
+        # 检测是否为 v3 格式
+        ptab_obj = ptab_module.load_ptab(src_file, fatal=False)
+        if ptab_obj and ptab_obj.is_v3():
+            # v3 格式：直接生成 ftab.bin 到 ftab 目录
+            import gen_ftab
+            chip_config = ptab_obj.get_chip_config()
+
+            # 获取 image 大小
+            imgs_info = env.get('IMGS_INFO', [])
+            bootloader_size = 0x10000
+            main_size = 0x200000
+
+            for img in imgs_info:
+                img_name = img.get('name', '')
+                if img_name == 'bootloader' and 'binary' in img:
+                    try:
+                        bootloader_size = os.path.getsize(str(img['binary'][0]))
+                    except:
+                        pass
+                elif img_name == 'main' and 'binary' in img:
+                    try:
+                        main_size = os.path.getsize(str(img['binary'][0]))
+                    except:
+                        pass
+
+            ftab_binary = gen_ftab.generate_ftab_binary(
+                ptab_obj, chip_config, bootloader_size, main_size
+            )
+
+            # 写 ftab.bin 到 ftab 目录
+            ftab_bin_path = os.path.join(os.path.dirname(target_file), 'ftab.bin')
+            with open(ftab_bin_path, 'wb') as f:
+                f.write(ftab_binary)
+
+            # 生成一个简单的 C 文件占位符（因为 ftab 子工程需要编译）
+            with open(target_file, 'w') as f:
+                f.write("/* ftab.c generated from ptab v3 */\n")
+                f.write("/* This is a placeholder - actual ftab.bin is generated separately */\n")
+                f.write("#include <stdint.h>\n")
+                f.write("const uint8_t __attribute__((used)) ftab_v3_placeholder = 0;\n")
+
+            logging.info(f"Generated ftab.bin from v3: {ftab_bin_path}")
+        else:
+            # v1/v2 格式：使用原有生成逻辑
+            resource.GenFtabCFile(src_file, target_file, env['IMGS_INFO'])
+
+
+def FtabBinBuild(target, source, env):
+    """直接生成 ftab.bin（用于 ptab v3）
+
+    当使用 ptab v3 格式时，可以直接生成 ftab.bin 而不需要编译 ftab 子工程。
+    """
+    import gen_ftab
+    import ptab as ptab_module
+
+    src_file = str(source[0])
+    target_file = str(target[0])
+
+    # 加载 ptab
+    ptab_obj = ptab_module.load_ptab(src_file, fatal=True)
+
+    # 获取 chip config
+    if ptab_obj.is_v3():
+        chip_config = ptab_obj.get_chip_config()
+    else:
+        # 尝试从环境中获取芯片信息
+        chip = env.get('CHIP', '').lower().replace('sf32lb', 'sf32lb').rstrip('x')
+        if chip:
+            chip_config = ptab_module.load_chip_config(chip)
+        else:
+            chip_config = {'mpi': {}, 'ram': {}}
+            logging.warning("No chip config available for ftab.bin generation")
+
+    # 获取 image 大小
+    imgs_info = env.get('IMGS_INFO', [])
+    bootloader_size = 0x10000
+    main_size = 0x200000
+
+    for img in imgs_info:
+        img_name = img.get('name', '')
+        if img_name == 'bootloader' and 'binary' in img:
+            try:
+                bootloader_size = os.path.getsize(str(img['binary'][0]))
+            except:
+                pass
+        elif img_name == 'main' and 'binary' in img:
+            try:
+                main_size = os.path.getsize(str(img['binary'][0]))
+            except:
+                pass
+
+    # 生成 ftab.bin
+    ftab_binary = gen_ftab.generate_ftab_binary(
+        ptab_obj,
+        chip_config,
+        bootloader_size,
+        main_size
+    )
+
+    # 写入文件
+    with open(target_file, 'wb') as f:
+        f.write(ftab_binary)
+
+    logging.info(f"Generated ftab.bin: {target_file} ({len(ftab_binary)} bytes)")
+       
 
 def FileCopyBuild(target, source, env):
     import resource
@@ -1339,6 +1483,11 @@ def PrepareBuilding(env, has_libcpu=False, remove_components=[], buildlib=None):
     ftab_cfile_action = SCons.Action.Action(FtabCFileBuild, 'Generating $TARGET ...')
     bld = Builder(action = ftab_cfile_action, suffix = '.c')
     Env.Append(BUILDERS = {"FtabCFile": bld})
+
+    # add FtabBin builder (for ptab v3 - direct binary generation)
+    ftab_bin_action = SCons.Action.Action(FtabBinBuild, 'Generating $TARGET ...')
+    bld = Builder(action = ftab_bin_action, suffix = '.bin')
+    Env.Append(BUILDERS = {"FtabBin": bld})
 
     # add DownloadScript builder
     download_script_action = SCons.Action.Action(DownloadScriptBuild, 'Generating $TARGET ...')
@@ -2882,7 +3031,29 @@ def AddBootLoader(SIFLI_SDK, chip):
         proj_path = os.path.join(SIFLI_SDK, 'example/boot_loader/project/sf32lb58x_v2')
         AddChildProj(proj_name, proj_path, False)
 
-def AddFTAB(SIFLI_SDK, chip):
+def AddFTAB(SIFLI_SDK, chip, env=None):
+    """Add ftab subproject based on ptab version
+    
+    - v3 format: Skip subproject, ftab.bin generated by script
+    - v1/v2 format: Add ftab subproject for compilation
+    """
+    import ptab as ptab_module
+    
+    # Try to get ptab path from environment
+    ptab_path = None
+    if env and 'PARTITION_TABLE' in env:
+        ptab_path = env['PARTITION_TABLE']
+    
+    # Check if this is v3 format
+    if ptab_path and os.path.exists(ptab_path):
+        ptab_obj = ptab_module.load_ptab(ptab_path, fatal=False)
+        if ptab_obj and ptab_obj.is_v3():
+            # v3 format: Skip subproject, ftab.bin will be generated by script
+            logging.info(f"ftab.bin will be generated by script (no subproject) for chip: {chip} (ptab v3)")
+            return
+    
+    # v1/v2 format: Add ftab subproject
+    logging.info(f"Adding ftab subproject for chip: {chip} (ptab v1/v2)")
     proj_path = None
     proj_name = 'ftab'
     if "SF32LB56X" == chip:
