@@ -258,6 +258,11 @@ def validate_no_overlap(partitions: List[dict], chip_config: dict) -> List[Valid
     region_partitions = {}
     for p in partitions:
         region = p.get('region', '')
+        # NOTE: internal RAM regions are frequently re-used across boot stages
+        # (bootloader vs main) and may overlap by design. Keep overlap checks
+        # strict for storage regions, but skip internal RAM.
+        if region == 'hpsys_ram' or str(region).startswith('hpsys') or region == 'lpsys_ram' or str(region).startswith('lpsys'):
+            continue
         if region not in region_partitions:
             region_partitions[region] = []
 

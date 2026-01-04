@@ -1,0 +1,134 @@
+# ptab v3 - Partition Table
+# Board: sf32lb52-nano_a128r16
+# Chip: SF32LB52JUD6
+
+version: 3
+chip: SF32LB52JUD6
+
+memory:
+  - mpi: mpi2
+    type: nand
+    size: 134217728 # 128MB
+
+partitions:
+  # Flash Table (ftab)
+  - name: flash_table
+    type: ftab
+    region: mpi2
+    offset: 0
+    size: 32KB
+
+  # Calibration data
+  - name: calibration
+    type: data
+    subtype: calibration
+    region: mpi2
+    offset: 0x8000
+    size: 8KB
+
+  # Bootloader (存储在 Flash，执行在 RAM)
+  - name: bootloader
+    type: bootloader
+    region: mpi2
+    offset: 0x80000
+    size: 64KB
+    acc:
+      region: hpsys_ram
+      offset: 0x20000
+    core: HCPU
+
+  # Main application
+  - name: hcpu_flash_code
+    type: app
+    subtype: factory
+    region: mpi2
+    offset: 0xA0000
+    size: 4MB
+    acc:
+      region: mpi1
+      offset: 0
+    core: HCPU
+
+  # DFU application
+  - name: dfu_flash_code
+    type: app
+    subtype: dfu
+    region: mpi2
+    offset: 0x4A0000
+    size: 512KB
+    acc:
+      region: mpi1
+      offset: 0
+    core: HCPU
+
+  # DFU info region
+  - name: dfu_info
+    type: data
+    subtype: raw
+    region: mpi2
+    offset: 0x520000
+    size: 128KB
+
+  # DFU download region
+  - name: dfu_download_region
+    type: data
+    subtype: raw
+    region: mpi2
+    offset: 0x780000
+    size: 1152KB
+
+  # Filesystem region
+  - name: fs_region
+    type: data
+    subtype: filesystem
+    region: mpi2
+    offset: 0x8A0000
+    size: 4MB
+
+  # KVDB for DFU
+  - name: dfu
+    type: data
+    subtype: nvds
+    region: mpi2
+    offset: 0xCA0000
+    size: 16KB
+
+  # KVDB for BLE
+  - name: ble
+    type: data
+    subtype: nvds
+    region: mpi2
+    offset: 0xCA4000
+    size: 16KB
+
+  # PSRAM data region
+  - name: psram_data
+    type: data
+    subtype: ram
+    region: mpi1
+    offset: 0x400000
+    size: 4MB
+
+  # HCPU RAM data (shared with bootloader exec)
+  - name: hcpu_ram_data
+    type: data
+    subtype: ram
+    region: hpsys_ram
+    offset: 0
+    size: 128KB
+
+  # Bootloader RAM data
+  - name: bootloader_ram_data
+    type: data
+    subtype: ram
+    region: hpsys_ram
+    offset: 0x40000
+    size: 64KB
+
+  # LPSYS RAM
+  - name: lpsys_ram
+    type: data
+    subtype: ram
+    region: lpsys_ram
+    offset: 0
+    size: 24KB
