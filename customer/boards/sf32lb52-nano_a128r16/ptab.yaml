@@ -88,7 +88,7 @@ partitions:
   # KVDB for DFU
   - name: dfu
     type: data
-    subtype: nvds
+    subtype: flashdb_kv
     region: mpi2
     offset: 0xCA0000
     size: 16KB
@@ -96,7 +96,7 @@ partitions:
   # KVDB for BLE
   - name: ble
     type: data
-    subtype: nvds
+    subtype: flashdb_kv
     region: mpi2
     offset: 0xCA4000
     size: 16KB

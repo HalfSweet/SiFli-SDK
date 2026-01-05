@@ -217,6 +217,7 @@ acc 字段用于指定代码不能在 XiP 的时候实际的执行地址（搬�
 | 值 | 说明 |
 |------|------|
 | `nvds` | 通用数据存储 |
+| `flashdb_kv` | FlashDB KV 数据库（自动生成 `KVDB_*` 宏和 `FAL_PART_TABLE`） |
 | `filesystem` | 文件系统（生成 `FS_REGION_*` 宏） |
 | `littlefs` | LittleFS 文件系统，暂时无实际作用 |
 | `fat` / `fatfs` | FAT 文件系统，暂时无实际作用 |
@@ -279,6 +280,26 @@ acc 字段用于指定代码不能在 XiP 的时候实际的执行地址（搬�
 #define FS_REGION_OFFSET      (0x...)
 ```
 
+**FlashDB KV 分区：**
+
+当 `type=data` 且 `subtype=flashdb_kv` 时生成 KVDB 相关宏：
+
+```c
+#define KVDB_<NAME>_REGION_OFFSET  (0x...)
+#define KVDB_<NAME>_REGION_SIZE    (0x...)
+```
+
+同时自动生成 `FAL_PART_TABLE` 宏，收集所有 `flashdb_kv` 分区：
+
+```c
+#define FAL_PART_TABLE \
+{ \
+    {FAL_PART_MAGIC_WORD, "<name>", NOR_FLASHx_DEV_NAME, <offset>, <size>, 0}, \
+    ...
+}
+```
+
+其中 `NOR_FLASHx_DEV_NAME` 根据 `region` 确定：`mpi1` → `NOR_FLASH1_DEV_NAME`，`mpi2` → `NOR_FLASH2_DEV_NAME`。
 ## 构建系统集成
 
 ### 自动检测

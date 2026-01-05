@@ -8,6 +8,7 @@ import sys
 # import png
 import logging
 import ptab
+import re
 
 output_folder = "output"
 img_folder = "images"
@@ -851,6 +852,9 @@ def GenPartitionTableHeaderContentV3(env, ptab_obj):
         if ptype == 'app' and subtype == 'dfu' and core not in dfu_by_core:
             dfu_by_core[core] = p
 
+    # Collect flashdb_kv partitions for FAL_PART_TABLE generation
+    flashdb_kv_partitions = []
+
     # Group partitions by region for readability
     region_groups = {}
     for partition in partitions:
@@ -901,6 +905,17 @@ def GenPartitionTableHeaderContentV3(env, ptab_obj):
                 s += _define_u32('FS_REGION_START_ADDR', start_addr)
                 s += _define_u32('FS_REGION_SIZE', size)
                 s += _define_u32('FS_REGION_OFFSET', offset)
+
+            # FlashDB KV macros + FAL_PART_TABLE collection
+            if ptype == 'data' and subtype == 'flashdb_kv':
+                s += _define_u32('KVDB_{}_REGION_OFFSET'.format(name_upper), offset)
+                s += _define_u32('KVDB_{}_REGION_SIZE'.format(name_upper), size)
+                flashdb_kv_partitions.append({
+                    'name': name,
+                    'region': region,
+                    'offset': offset,
+                    'size': size,
+                })
 
             # attrs custom macros
             attrs = partition.get('attrs', {})
@@ -979,6 +994,36 @@ def GenPartitionTableHeaderContentV3(env, ptab_obj):
 
             s += _define_u32('CODE_START_ADDR', exec_addr)
             s += _define_u32('CODE_SIZE', size)
+
+    # Generate FAL_PART_TABLE if flashdb_kv partitions exist
+    if flashdb_kv_partitions:
+        s += MakeLine('')
+        s += MakeLine('')
+        s += MakeLine('/* FAL Partition Table for FlashDB */')
+        s += MakeLine('#define FAL_PART_TABLE \\')
+        s += MakeLine('{ \\')
+        for idx, fdb_part in enumerate(flashdb_kv_partitions):
+            # Determine NOR_FLASHx_DEV_NAME from region (mpi1->1, mpi2->2, etc.)
+            fdb_region = fdb_part['region']
+            match = re.match(r'mpi(\d+)', fdb_region)
+            if match:
+                flash_num = match.group(1)
+            else:
+                flash_num = '2'  # Default to flash2
+            dev_name = 'NOR_FLASH{}_DEV_NAME'.format(flash_num)
+            
+            fdb_name = fdb_part['name']
+            fdb_offset = fdb_part['offset']
+            fdb_size = fdb_part['size']
+            
+            # Last entry doesn't have trailing comma
+            if idx == len(flashdb_kv_partitions) - 1:
+                s += MakeLine('    {{FAL_PART_MAGIC_WORD, "{}", {}, 0x{:08X}, 0x{:08X}, 0}} \\'.format(
+                    fdb_name, dev_name, fdb_offset, fdb_size))
+            else:
+                s += MakeLine('    {{FAL_PART_MAGIC_WORD, "{}", {}, 0x{:08X}, 0x{:08X}, 0}}, \\'.format(
+                    fdb_name, dev_name, fdb_offset, fdb_size))
+        s += MakeLine('}')
 
     return s
 
