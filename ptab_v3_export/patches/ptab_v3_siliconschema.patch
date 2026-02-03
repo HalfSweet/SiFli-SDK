@@ -1,0 +1,27 @@
+diff --git a/common/ram/sf32lb52/ram.yaml b/common/ram/sf32lb52/ram.yaml
+index e25eef249482acb0cfb83eb43b97a0e5416604d6..f83e2e2a009b715241c0044bdcbc4552d2228aed 100644
+--- a/common/ram/sf32lb52/ram.yaml
++++ b/common/ram/sf32lb52/ram.yaml
+@@ -1,5 +1,4 @@
+ # SF32LB52 系列 RAM 配置
+-# 注意: SF32LB52 系列没有 LPSYS RAM
+ 
+ hpsys:
+   ram:
+@@ -32,3 +31,16 @@ hpsys:
+       lcpu:
+         offset: 0x2A040000
+         size: 0x40000    # 256KB
++
++lpsys:
++  ram:
++    ram0:
++      # LPSYS SRAM window for different cores:
++      # - HCPU view: 0x20400000
++      # - LCPU view (CBUS): 0x00400000
++      hcpu:
++        offset: 0x20400000
++        size: 0x6000     # 24KB
++      lcpu:
++        offset: 0x00400000
++        size: 0x6000     # 24KB

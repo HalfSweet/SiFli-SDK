@@ -1,0 +1,4458 @@
+diff --git a/customer/boards/sf32lb52-nano_a128r16/ptab.yaml b/customer/boards/sf32lb52-nano_a128r16/ptab.yaml
+index c5c3a0680c87a9d2b23ffedd3aed01e7fcd39544..9018d12377ba6f3d8b35a22a380230ee13716c4b 100644
+--- a/customer/boards/sf32lb52-nano_a128r16/ptab.yaml
++++ b/customer/boards/sf32lb52-nano_a128r16/ptab.yaml
+@@ -1,14 +1,14 @@
+ # ptab v3 - Partition Table
+ # Board: sf32lb52-nano_a128r16
+-# Chip: SF32LB525UC6
++# Chip: SF32LB52JUD6
+ 
+ version: 3
+-chip: SF32LB525UC6
++chip: SF32LB52JUD6
+ 
+ memory:
+   - mpi: mpi2
+     type: nand
+-    size: 16777216 # 16MB
++    size: 134217728 # 128MB
+ 
+ partitions:
+   # Flash Table (ftab)
+@@ -32,36 +32,39 @@ partitions:
+     region: mpi2
+     offset: 0x80000
+     size: 64KB
+-    exec_region: hpsys_ram
+-    exec_offset: 0x20000
++    acc:
++      region: hpsys_ram
++      offset: 0x20000
+     core: HCPU
+ 
+-  # Main application (XIP 执行)
++  # Main application
+   - name: hcpu_flash_code
+     type: app
+     subtype: factory
+     region: mpi2
+     offset: 0xA0000
+     size: 4MB
+-    exec_region: mpi1
+-    exec_offset: 0
++    acc:
++      region: mpi1
++      offset: 0
+     core: HCPU
+ 
+-  # DFU application (XIP 执行)
++  # DFU application
+   - name: dfu_flash_code
+     type: app
+     subtype: dfu
+     region: mpi2
+     offset: 0x4A0000
+     size: 512KB
+-    exec_region: mpi1
+-    exec_offset: 0
++    acc:
++      region: mpi1
++      offset: 0
+     core: HCPU
+ 
+   # DFU info region
+   - name: dfu_info
+     type: data
+-    subtype: nvds
++    subtype: raw
+     region: mpi2
+     offset: 0x520000
+     size: 128KB
+@@ -69,7 +72,7 @@ partitions:
+   # DFU download region
+   - name: dfu_download_region
+     type: data
+-    subtype: nvds
++    subtype: raw
+     region: mpi2
+     offset: 0x780000
+     size: 1152KB
+@@ -129,11 +132,3 @@ partitions:
+     region: lpsys_ram
+     offset: 0
+     size: 24KB
+-
+-  # Accelerate region (required when exec_region is used)
+-  - name: accelerate
+-    type: app
+-    subtype: accelerate
+-    region: mpi1
+-    offset: 0
+-    size: 4MB
+diff --git a/customer/boards/sf32lb52-nano_n16r16/ptab.yaml b/customer/boards/sf32lb52-nano_n16r16/ptab.yaml
+index bfd61133fb001c4a7488d1e48c434c43a08dddb9..67223b24161506c50fb53c56580f15902352c308 100644
+--- a/customer/boards/sf32lb52-nano_n16r16/ptab.yaml
++++ b/customer/boards/sf32lb52-nano_n16r16/ptab.yaml
+@@ -1,62 +1,84 @@
+ # ptab v3 - Partition Table
+-# Board: sf32lb52-nano_a128r16
+-# Chip: SF32LB52
++# Board: sf32lb52-nano_n16r16
++# Chip: SF32LB52JUD6
+ 
+ version: 3
+-chip: SF32LB52
++chip: SF32LB52JUD6
++
++memory:
++  - mpi: mpi2
++    type: nand
++    size: 16777216 # 16MB
+ 
+ partitions:
+   # Flash Table (ftab)
+-  - name: ftab
++  - name: flash_table
+     type: ftab
+     region: mpi2
+     offset: 0
+     size: 128KB
+ 
++  # Calibration data
++  - name: calibration
++    type: data
++    subtype: calibration
++    region: mpi2
++    offset: 0x20000
++    size: 8KB
++
+   # Bootloader
+   - name: bootloader
+     type: bootloader
+     region: mpi2
+     offset: 0x80000
+     size: 64KB
++    acc:
++      region: hpsys_ram
++      offset: 0x20000
+     core: HCPU
+ 
+   # Main application
+-  - name: main
++  - name: hcpu_flash_code
+     type: app
+     subtype: factory
+     region: mpi2
+     offset: 0xA0000
+     size: 4MB
++    acc:
++      region: psram1
++      offset: 0
+     core: HCPU
+ 
+   # DFU application
+-  - name: dfu
++  - name: dfu_flash_code
+     type: app
+     subtype: dfu
+     region: mpi2
+     offset: 0x4A0000
+     size: 512KB
++    acc:
++      region: psram1
++      offset: 0
+     core: HCPU
+ 
+   # DFU info region
+   - name: dfu_info
+     type: data
+-    subtype: nvds
++    subtype: raw
+     region: mpi2
+     offset: 0x520000
+     size: 128KB
+ 
+   # DFU download region
+-  - name: dfu_download
++  - name: dfu_download_region
+     type: data
+-    subtype: nvds
++    subtype: raw
+     region: mpi2
+     offset: 0x780000
+     size: 1152KB
+ 
+   # Filesystem region
+-  - name: fs
++  - name: fs_region
+     type: data
+     subtype: filesystem
+     region: mpi2
+@@ -64,7 +86,7 @@ partitions:
+     size: 4MB
+ 
+   # KVDB for DFU
+-  - name: kvdb_dfu
++  - name: kvdb_dfu_region
+     type: data
+     subtype: nvds
+     region: mpi2
+@@ -72,7 +94,7 @@ partitions:
+     size: 16KB
+ 
+   # KVDB for BLE
+-  - name: kvdb_ble
++  - name: kvdb_ble_region
+     type: data
+     subtype: nvds
+     region: mpi2
+@@ -88,7 +110,7 @@ partitions:
+     size: 4MB
+ 
+   # HCPU RAM data (shared with bootloader exec)
+-  - name: hcpu_ram
++  - name: hcpu_ram_data
+     type: data
+     subtype: ram
+     region: hpsys_ram
+@@ -96,7 +118,7 @@ partitions:
+     size: 128KB
+ 
+   # Bootloader RAM data
+-  - name: bootloader_ram
++  - name: bootloader_ram_data
+     type: data
+     subtype: ram
+     region: hpsys_ram
+@@ -104,17 +126,9 @@ partitions:
+     size: 64KB
+ 
+   # LPSYS RAM
+-  - name: lpsys
++  - name: lpsys_ram
+     type: data
+     subtype: ram
+     region: lpsys_ram
+     offset: 0
+     size: 24KB
+-
+-  # Accelerate region (required when exec_region is used)
+-  - name: accelerate
+-    type: app
+-    subtype: accelerate
+-    region: psram1
+-    offset: 0
+-    size: 4MB
+diff --git a/docs/source/zh_CN/middleware/partition_table_v3.md b/docs/source/zh_CN/middleware/partition_table_v3.md
+index 3d059a002a613b524467ca88f74088789fc86528..5121c5c5cb58b19c281b1edf7159b13d1cf1a404 100644
+--- a/docs/source/zh_CN/middleware/partition_table_v3.md
++++ b/docs/source/zh_CN/middleware/partition_table_v3.md
+@@ -8,44 +8,147 @@ ptab v3 是 SiFli SDK 中新一代分区表格式，采用 YAML 格式，相比
+ 
+ - **更清晰的语义**：使用 `type`/`subtype` 替代复杂的 `tags` 机制
+ - **抽象的存储层**：通过 `region` 字段引用逻辑存储区域，与芯片拓扑解耦
+-- **统一的执行地址**：通过 `exec_region`/`exec_offset` 明确指定执行地址
++- **统一的执行地址**：通过 `acc: {region, offset}` 明确指定执行地址/搬运落点
+ - **自动宏生成**：从 `name` 字段自动生成 C 宏定义
+ - **更好的验证**：内置验证工具检查分区配置正确性
+ 
++和 patb v1/v2 不同的是，ptab v3 与构建系统紧密结合，直接生成`ftab.bin`、`ptab.h`，以及使用基于 jinja2 的链接脚本片段等。
++
+ ## 文件格式
+ 
+ ### 基本结构
+ 
+ ```yaml
+-# ptab v3 - Partition Table
+ version: 3
+-chip: SF32LB52
++chip: SF32LB525UC6
++
++memory:
++  - mpi: mpi2
++    type: nand
++    size: 16777216 # 16MB
+ 
+ partitions:
+-  - name: ftab
++  # Flash Table (ftab)
++  - name: flash_table
+     type: ftab
+     region: mpi2
+     offset: 0
+-    size: 128KB
++    size: 32KB
++
++  # Calibration data
++  - name: calibration
++    type: data
++    subtype: calibration
++    region: mpi2
++    offset: 0x8000
++    size: 8KB
+ 
++  # Bootloader （存储在 Flash，执行在 RAM)
+   - name: bootloader
+     type: bootloader
+     region: mpi2
+     offset: 0x80000
+     size: 64KB
+-    exec_region: hpsys_ram
+-    exec_offset: 0x20000
++    acc:
++      region: hpsys_ram
++      offset: 0x20000
+     core: HCPU
+ 
+-  - name: main
++  # Main application
++  - name: hcpu_flash_code
+     type: app
+     subtype: factory
+     region: mpi2
+     offset: 0xA0000
+     size: 4MB
+-    exec_region: psram1
+-    exec_offset: 0
++    acc:
++      region: mpi1
++      offset: 0
+     core: HCPU
++
++  # DFU application
++  - name: dfu_flash_code
++    type: app
++    subtype: dfu
++    region: mpi2
++    offset: 0x4A0000
++    size: 512KB
++    acc:
++      region: mpi1
++      offset: 0
++    core: HCPU
++
++  # DFU info region
++  - name: dfu_info
++    type: data
++    subtype: nvds
++    region: mpi2
++    offset: 0x520000
++    size: 128KB
++
++  # DFU download region
++  - name: dfu_download_region
++    type: data
++    subtype: nvds
++    region: mpi2
++    offset: 0x780000
++    size: 1152KB
++
++  # Filesystem region
++  - name: fs_region
++    type: data
++    subtype: filesystem
++    region: mpi2
++    offset: 0x8A0000
++    size: 4MB
++
++  # KVDB for DFU
++  - name: kvdb_dfu_region
++    type: data
++    subtype: nvds
++    region: mpi2
++    offset: 0xCA0000
++    size: 16KB
++
++  # KVDB for BLE
++  - name: kvdb_ble_region
++    type: data
++    subtype: nvds
++    region: mpi2
++    offset: 0xCA4000
++    size: 16KB
++
++  # PSRAM data region
++  - name: psram_data
++    type: data
++    subtype: ram
++    region: mpi1
++    offset: 0x400000
++    size: 4MB
++
++  # HCPU RAM data (shared with bootloader exec)
++  - name: hcpu_ram_data
++    type: data
++    subtype: ram
++    region: hpsys_ram
++    offset: 0
++    size: 128KB
++
++  # Bootloader RAM data
++  - name: bootloader_ram_data
++    type: data
++    subtype: ram
++    region: hpsys_ram
++    offset: 0x40000
++    size: 64KB
++
++  # LPSYS RAM
++  - name: lpsys_ram
++    type: data
++    subtype: ram
++    region: lpsys_ram
++    offset: 0
++    size: 24KB
+ ```
+ 
+ ### 顶层字段
+@@ -53,9 +156,20 @@ partitions:
+ | 字段 | 类型 | 必填 | 说明 |
+ |------|------|------|------|
+ | `version` | int | 是 | 固定为 `3` |
+-| `chip` | string | 是 | 芯片型号，如 `SF32LB52`、`SF32LB58` |
++| `chip` | string | 是 | 芯片型号，如 `SF32LB525UC6`、`SF32LB52JUD6`等 |
++| `memory` | list | 否 | 存储区域定义列表 |
+ | `partitions` | list | 是 | 分区列表 |
+ 
++## memory 定义
++
++memory 用于定义外挂的存储器的熟悉，如 NAND Flash、NOR Flash 等。
++
++| 字段 | 类型 | 必填 | 说明 |
++|------|------|------|------|
++| `mpi` | string | 是 | MPI 接口名称，如 `mpi2` |
++| `type` | string | 是 | 存储器类型，可选为 `nand`、`nor`、`sd` |
++| `size` | string | 是 | 存储器大小，支持 `0x` 前缀和 `KB`/`MB` 后缀 |
++
+ ### 分区字段
+ 
+ | 字段 | 类型 | 必填 | 说明 |
+@@ -66,11 +180,18 @@ partitions:
+ | `region` | string | 是 | 存储区域（逻辑名称） |
+ | `offset` | int/string | 是 | 区域内偏移，支持 `0x` 前缀和 `KB`/`MB` 后缀 |
+ | `size` | int/string | 是 | 分区大小 |
+-| `exec_region` | string | 否 | 执行区域（代码加载到此区域执行） |
+-| `exec_offset` | int/string | 否 | 执行区域内偏移 |
++| `acc` | dict | 否 | 执行地址定义 |
+ | `core` | string | 否 | 运行核心：`HCPU` 或 `LCPU` |
+ | `attrs` | dict | 否 | 自定义属性 |
+ 
++#### acc 字段
++
++acc 字段用于指定代码不能在 XiP 的时候实际的执行地址（搬运到 psram 或者 sram 中执行）。
++| 字段 | 类型 | 必填 | 说明 |
++|------|------|------|------|
++| `region` | string | 是 | 执行区域（逻辑名称） |
++| `offset` | int/string | 是 | 执行区域内偏移，支持 `0x` 前缀和 `KB`/`MB` 后缀 |
++
+ ## 分区类型定义
+ 
+ ### type 字段
+@@ -89,8 +210,7 @@ partitions:
+ | 值 | 说明 |
+ |------|------|
+ | `factory` | 出厂主程序 |
+-| `dfu` | DFU 升级程序 |
+-| `accelerate` | 加速区域（psram XIP） |
++| `dfu` | DFU 升级程序，需要注意的是 dfu 也是一个独立运行的程序 |
+ 
+ **当 type=data 时：**
+ 
+@@ -98,11 +218,13 @@ partitions:
+ |------|------|
+ | `nvds` | 通用数据存储 |
+ | `filesystem` | 文件系统（生成 `FS_REGION_*` 宏） |
+-| `littlefs` | LittleFS 文件系统 |
+-| `fat` / `fatfs` | FAT 文件系统 |
+-| `flashdb` | FlashDB 数据库 |
+-| `ram` | RAM 数据区 |
++| `littlefs` | LittleFS 文件系统，暂时无实际作用 |
++| `fat` / `fatfs` | FAT 文件系统，暂时无实际作用 |
++| `flashdb` | FlashDB 数据库，暂时无实际作用 |
++| `ram` | RAM 数据区，对于 hpsys_ram 和 lpsys_ram 来说，没有额外改动的情况下可以省略 |
+ | `calibration` | 校准数据 |
++| `raw` | 原始数据区，用于存放由应用程序自行分配的区域 |
++| `int_res` | 内置资源，与 raw 不同的是，int_res 是会被链接到最终的 elf 中的，然后我们再通过段名进行切割 |
+ 
+ ## 存储区域 (region)
+ 
+@@ -110,10 +232,7 @@ partitions:
+ 
+ | 区域 | 说明 |
+ |------|------|
+-| `mpi1` | MPI1 Flash（通常为内部 Flash） |
+-| `mpi2` | MPI2 Flash（通常为外部 Flash） |
+-| `mpi3`~`mpi5` | 其他 MPI 接口 |
+-| `psram1` | PSRAM 区域 |
++| `mpix` | 第 x 个 MPI 接口对应的存储器，如 `mpi1`、`mpi2` |
+ | `hpsys_ram` | HPSYS RAM |
+ | `lpsys_ram` | LPSYS RAM |
+ 
+@@ -137,28 +256,19 @@ partitions:
+ #define <NAME>_SIZE          (0x...)  // 分区大小
+ #define <NAME>_OFFSET        (0x...)  // 区域内偏移
+ ```
+-
+-### 执行地址宏
+-
+-当分区包含 `exec_region` 时，额外生成：
+-
+-```c
+-#define APP_<NAME>_CODE_START_ADDR  (0x...)  // CBUS 执行地址
+-#define APP_<NAME>_CODE_SIZE        (0x...)  // 代码大小
+-#define APP_<NAME>_CODE_OFFSET      (0x...)  // 执行区域偏移
+-```
+-
+ ### 特殊宏
+ 
+-**accelerate 分区：**
++**CODE_START 分区：**
+ 
+-当 `type=app` 且 `subtype=accelerate` 时生成：
++当 `type=app` 且 `subtype=factory` 时生成：
+ 
+ ```c
+-#define CODE_START_ADDR  (0x...)  // XIP 起始地址（用于链接脚本）
++#define CODE_START_ADDR  (0x...)
+ #define CODE_SIZE        (0x...)
+ ```
+ 
++需要注意的是，`CODE_START_ADDR` 对应 `acc` 字段指定的执行地址。如果没有指定 `acc`，则使用存储的 CBUS 地址。
++
+ **文件系统分区：**
+ 
+ 当 `type=data` 且 `subtype` 为 `filesystem`/`littlefs`/`fat`/`fatfs`/`flashdb` 时生成：
+@@ -169,128 +279,6 @@ partitions:
+ #define FS_REGION_OFFSET      (0x...)
+ ```
+ 
+-## 完整示例
+-
+-### sf32lb52-nano_a128r16/ptab.yaml
+-
+-```yaml
+-# ptab v3 - Partition Table
+-# Board: sf32lb52-nano_a128r16
+-# Chip: SF32LB52
+-
+-version: 3
+-chip: SF32LB52
+-
+-partitions:
+-  # Flash Table
+-  - name: flash_table
+-    type: ftab
+-    region: mpi2
+-    offset: 0
+-    size: 128KB
+-
+-  # 校准数据
+-  - name: calibration
+-    type: data
+-    subtype: calibration
+-    region: mpi2
+-    offset: 0x8000
+-    size: 8KB
+-
+-  # Bootloader（从 Flash 加载到 RAM 执行）
+-  - name: bootloader
+-    type: bootloader
+-    region: mpi2
+-    offset: 0x80000
+-    size: 64KB
+-    exec_region: hpsys_ram
+-    exec_offset: 0x20000
+-    core: HCPU
+-
+-  # 主程序（从 Flash 加载到 PSRAM 执行）
+-  - name: main
+-    type: app
+-    subtype: factory
+-    region: mpi2
+-    offset: 0xA0000
+-    size: 4MB
+-    exec_region: psram1
+-    exec_offset: 0
+-    core: HCPU
+-
+-  # DFU 程序
+-  - name: dfu
+-    type: app
+-    subtype: dfu
+-    region: mpi2
+-    offset: 0x4A0000
+-    size: 512KB
+-    exec_region: psram1
+-    exec_offset: 0
+-    core: HCPU
+-
+-  # 文件系统
+-  - name: fs
+-    type: data
+-    subtype: filesystem
+-    region: mpi2
+-    offset: 0x8A0000
+-    size: 4MB
+-
+-  # KVDB
+-  - name: kvdb_dfu
+-    type: data
+-    subtype: nvds
+-    region: mpi2
+-    offset: 0xCA0000
+-    size: 16KB
+-
+-  - name: kvdb_ble
+-    type: data
+-    subtype: nvds
+-    region: mpi2
+-    offset: 0xCA4000
+-    size: 16KB
+-
+-  # PSRAM 数据区
+-  - name: psram_data
+-    type: data
+-    subtype: ram
+-    region: psram1
+-    offset: 0x400000
+-    size: 4MB
+-
+-  # RAM 区域
+-  - name: hcpu_ram
+-    type: data
+-    subtype: ram
+-    region: hpsys_ram
+-    offset: 0
+-    size: 128KB
+-
+-  - name: bootloader_ram
+-    type: data
+-    subtype: ram
+-    region: hpsys_ram
+-    offset: 0x40000
+-    size: 64KB
+-
+-  - name: lpsys
+-    type: data
+-    subtype: ram
+-    region: lpsys_ram
+-    offset: 0
+-    size: 24KB
+-
+-  # Accelerate 分区（当使用 exec_region 时必须存在）
+-  - name: accelerate
+-    type: app
+-    subtype: accelerate
+-    region: psram1
+-    offset: 0
+-    size: 4MB
+-```
+-
+ ## 构建系统集成
+ 
+ ### 自动检测
+@@ -312,7 +300,7 @@ partitions:
+ |------|------|
+ | `ptab.h` | C 头文件，包含所有分区宏定义 |
+ | `ftab.bin` | 二进制 Flash Table，用于 bootloader |
+-| `link_copy.lds` | 链接脚本（通过 ptab.h 宏配置） |
++| `link_copy.lds` | 链接脚本 |
+ 
+ ### ftab.bin 生成
+ 
+@@ -323,18 +311,9 @@ Generating build_xxx/ftab.bin ...
+ Generated ftab.bin: build_xxx/ftab.bin (11280 bytes)
+ ```
+ 
+-## 迁移工具
+-
+-### migrate_ptab_to_v3.py
++### jinja2 链接脚本模板
+ 
+-将 v1/v2 的 `ptab.json` 转换为 v3 的 `ptab.yaml`：
+-
+-```bash
+-python tools/build/migrate_ptab_to_v3.py \
+-    --input customer/boards/<board>/ptab.json \
+-    --output customer/boards/<board>/ptab.yaml \
+-    --chip SF32LB52
+-```
++在 patb v1/v2 中，链接脚本使用编译器的c风格预处理器进行生成`link_copy.lds`。而在 ptab v3 中，链接脚本片段使用 jinja2 模板生成，模板文件位于 `drivers/cmsis/<chip>` 目录下。和patb v1/v2 类似，如果需要在工程中修改链接模板，可以添加对应的`link.jinja2`文件到工程目录中。另外需要注意的是，patb v3必须使用jinja2模板，不可以再使用c风格预处理器；同样的，patb v1/v2 也不支持jinja2模板。
+ 
+ ### validate_ptab_v3.py
+ 
+@@ -349,22 +328,10 @@ python tools/build/validate_ptab_v3.py customer/boards/<board>/ptab.yaml
+ - 类型/子类型有效性
+ - 区域名称有效性
+ - 分区重叠检测
+-- `exec_region` 使用时 `accelerate` 分区存在性
+ - `bootloader` 分区唯一性
+ 
+ ## 常见问题
+ 
+-### Q: 为什么需要 accelerate 分区？
+-
+-当使用 `exec_region` 指定代码执行在 PSRAM 时，链接脚本需要知道 XIP 起始地址。`accelerate` 分区的 XIP 地址用作 `CODE_START_ADDR`，bootloader 会将代码加载到此地址执行。
+-
+-### Q: region 和 exec_region 的区别？
+-
+-- `region`：代码/数据的**存储位置**（Flash 中的位置）
+-- `exec_region`：代码的**执行位置**（RAM/PSRAM 中执行的地址）
+-
+-例如：代码存储在 Flash (`region: mpi2`)，但加载到 PSRAM 执行 (`exec_region: psram1`)。
+-
+ ### Q: 如何添加自定义宏？
+ 
+ 使用 `attrs` 字段：
+@@ -394,7 +361,7 @@ python tools/build/validate_ptab_v3.py customer/boards/<board>/ptab.yaml
+ | `FS_REGION` | `type: data, subtype: filesystem` |
+ | `KVDB_*` | `type: data, subtype: nvds` |
+ | `app_img` | `type: app` |
+-| `app_exec` | 使用 `exec_region` 字段 |
++| `app_exec` | 使用 `acc: {region, offset}`（当不能 XIP 或需要固定执行地址时） |
+ 
+ ## 变更历史
+ 
+diff --git a/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/link.jinja2 b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/link.jinja2
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f01d9ab874959774b624b6d10264f53aa14c12d
+--- /dev/null
++++ b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/link.jinja2
+@@ -0,0 +1,433 @@
++/******************************************************************************
++ * @file     gcc_arm.ld
++ * @brief    GNU Linker Script for Cortex-M based device (Jinja2 template)
++ * @version  V2.0.0
++ * @date     21. May 2019
++ ******************************************************************************/
++/*
++ * NOTE:
++ * - This file is rendered by SiFli build system (ptab v3, Jinja2-only).
++ * - Do NOT add C preprocessor directives here (#include/#ifdef/#ifndef...).
++ */
++
++__ROM_BASE = {{ hex32(defines['__ROM_BASE']) }};
++__ROM_SIZE = {{ hex32(defines['__ROM_SIZE']) }};
++__RAM_BASE = {{ hex32(defines['__RAM_BASE']) }};
++__RAM_SIZE = {{ hex32(defines['__RAM_SIZE']) }};
++
++__STACK_SIZE = 0x00002000;
++__HEAP_SIZE  = 0x00000C00;
++
++__ROM_EX_BASE = {{ hex32(defines['__ROM_EX_BASE']) }};
++__ROM_EX_SIZE = {{ hex32(defines['__ROM_EX_SIZE']) }};
++
++__PSRAM_BASE = {{ hex32(defines['__PSRAM_BASE']) }};
++__PSRAM_SIZE = {{ hex32(defines['__PSRAM_SIZE']) }};
++
++__ROM2_BASE = {{ hex32(defines['__ROM2_BASE']) }};
++__ROM2_SIZE = {{ hex32(defines['__ROM2_SIZE']) }};
++
++__ROM3_BASE = {{ hex32(defines['__ROM3_BASE']) }};
++__ROM3_SIZE = {{ hex32(defines['__ROM3_SIZE']) }};
++
++MEMORY
++{
++    ROM (rx) : ORIGIN = __ROM_BASE, LENGTH = __ROM_SIZE
++    RAM (rw) : ORIGIN = __RAM_BASE, LENGTH = __RAM_SIZE
++    ROM_EX(rw):ORIGIN = __ROM_EX_BASE, LENGTH = __ROM_EX_SIZE
++    PSRAM(rw): ORIGIN = __PSRAM_BASE, LENGTH = __PSRAM_SIZE
++    ROM2 (rx): ORIGIN = __ROM2_BASE, LENGTH = __ROM2_SIZE
++    ROM3 (rx): ORIGIN = __ROM3_BASE, LENGTH = __ROM3_SIZE
++}
++
++ENTRY(Reset_Handler)
++
++SECTIONS
++{
++{% if not defines.get('FLASH_TABLE_ONLY') %}
++  .vectors :
++  {
++    _stext = ABSOLUTE(.);
++    KEEP(*(.vectors));
++    /* workaround to avoid load address of .retm_data doesn't skip .vectors region */
++    . = . + 4;
++  } > ROM
++
++  .stack :
++  {
++    . = ALIGN(8);
++    __StackLimit = .;
++    . = . + __STACK_SIZE;
++    . = ALIGN(8);
++    __StackTop = .;
++  } > RAM
++  PROVIDE(__stack = __StackTop);
++
++  .heap :
++  {
++    . = ALIGN(8);
++    __end__ = .;
++    PROVIDE(end = .);
++    . = . + __HEAP_SIZE;
++    . = ALIGN(8);
++    __HeapLimit = .;
++  } > RAM
++
++  .retm_data :
++  {
++    . = ALIGN(4);
++    __rw_retm_data_start__ = .;
++    * (.*l1_ret_text_*)
++    * (.*l1_ret_rodata_*)
++
++    *drv_spi_flash.o     (.text* .rodata*)
++    *flash_table.o       (.text* .rodata*)
++    *bf0_hal_mpi.o       (.text* .rodata*)
++    *bf0_hal_mpi_ex.o    (.text* .rodata*)
++    *bf0_hal_mpi_psram.o (.text* .rodata*)
++    *flash.o             (.text* .rodata*)
++    *drv_psram.o         (.text* .rodata*)
++
++    *context_gcc.o      (.text* .rodata*)
++    *drv_common.o       (.text.HAL_GetTick)
++    *bf0_hal_rcc.o      (.text* .rodata*)
++
++    *bf0_pm.o           (.text.sifli_light_handler)
++    *bf0_pm.o           (.text.sifli_deep_handler)
++    *bf0_pm.o           (.text.sifli_standby_handler)
++    *bf0_pm.o           (.text.SystemInitFromStandby)
++    *.o                 (.text.SystemPowerOnModeGet)
++
++    *bsp_init.o         (.text* .rodata*)
++    *bsp_lcd_tp.o       (.text* .rodata*)
++    *bsp_pinmux.o       (.text* .rodata*)
++    *bsp_power.o        (.text* .rodata*)
++    *bf0_hal_gpio.o     (.text* .rodata*)
++
++    *bf0_hal_hpaon.o    (.text* .rodata*)
++    *bf0_hal.o          (.text.HAL_Init)
++    *.o                 (.text.HAL_Delay_us)
++    *.o                 (.text.HAL_Delay_us_)
++    *.o                 (.text.HAL_Delay_us2_)
++    *.o                 (.text.HAL_MspInit)
++    *.o                 (.text.HAL_Delay)
++    *bf0_hal_pinmux.o   (.text* .rodata*)
++    *bf0_pin_const.o    (.text* .rodata*)
++    *drv_common.o       (.text.rt_hw_us_delay)
++    *.o                 (.text.rt_memset)
++    *rt_memclr*.o       (.text*)
++    *memset*.o          (.text*)
++
++{% if defines.get('BSP_QSPI2_DUAL_MODE') %}
++    *bf0_hal_dma.o (.text* .rodata*)
++    *.o (.text.HAL_GetTick)
++    *.o (.text.HAL_AssertFailed)
++    *.o (.text.HAL_NVIC_DisableIRQ)
++    *bf0_hal_cortex.o (.text* .rodata*)
++{% endif %}
++
++    *.o (.retm_data_*)
++
++    . = ALIGN(4);
++    __rw_retm_data_end__ = .;
++
++  } > RAM AT > ROM
++{% endif %}
++
++  .text :
++  {
++{% if defines.get('FLASH_TABLE_ONLY') %}
++    KEEP(*ftab.o(.text* .rodata*))
++{% else %}
++    *(.text*)
++    *(.rodata*)
++
++    KEEP(*(.init))
++    KEEP(*(.fini))
++
++    /* section information for finsh shell */
++    . = ALIGN(4);
++    __fsymtab_start = .;
++    KEEP(*(FSymTab))
++    __fsymtab_end = .;
++
++    . = ALIGN(4);
++    __vsymtab_start = .;
++    KEEP(*(VSymTab))
++    __vsymtab_end = .;
++
++    . = ALIGN(4);
++    LcdDriverDescTab_start = .;
++    KEEP(*(LcdDriverDescTab))
++    LcdDriverDescTab_end = .;
++
++    . = ALIGN(4);
++    __rt_utest_tc_tab_start = .;
++    KEEP(*(UtestTcTab))
++    __rt_utest_tc_tab_end = .;
++
++    /* section information for initial. */
++    . = ALIGN(4);
++    __rt_init_start = .;
++    KEEP(*(SORT(.rti_fn*)))
++    __rt_init_end = .;
++
++    . = ALIGN(4);
++    BuiltinAppTab_start = .;
++    KEEP(*(BuiltinAppTab))
++    BuiltinAppTab_end = .;
++
++    . = ALIGN(4);
++    __app_font_start__ = .;
++    KEEP(*(.app_font))
++    __app_font_end__ = .;
++
++    . = ALIGN(4);
++    __SerialTranExport_start__ = .;
++    KEEP(*(SerialTranExport))
++    __SerialTranExport_end__ = .;
++
++    . = ALIGN(4);
++    __sifli_reg_start__ = .;
++    KEEP(*(SORT(.sifli_reg*)))
++    __sifli_reg_end__ = .;
++
++    . = ALIGN(4);
++    __bt_sifli_reg_start__ = .;
++    KEEP(*(SORT(.bt_sifli_reg*)))
++    __bt_sifli_reg_end__ = .;
++
++    /* section information for modules */
++    . = ALIGN(4);
++    __rtmsymtab_start = .;
++    KEEP(*(RTMSymTab))
++    __rtmsymtab_end = .;
++
++    . = ALIGN(4);
++    __usbh_class_info_start__ = .;
++    KEEP(*(.usbh_class_info))
++    __usbh_class_info_end__ = .;
++
++    KEEP(*(.eh_frame*))
++    _etext = ABSOLUTE(.);
++{% endif %}
++  } > ROM
++
++{% if defines.get('ZBT') %}
++{% include 'zbt_rom.jinja2' %}
++{% endif %}
++
++{% if not defines.get('FLASH_TABLE_ONLY') %}
++  .rom_ex :
++  {
++
++    . = ALIGN(4);
++    __rw_rom_ex_start__ = .;
++    __ER_IROM1_EX$$RO_start__ = .;
++    __ER_IROM1_EX$$RO_load_start__ = LOADADDR(.rom_ex);
++
++    *(.l1_non_ret_text_*)
++    *(.l1_non_ret_rodata_*)
++
++    . = ALIGN(4);
++    __rw_rom_ex_end__ = .;
++    __ER_IROM1_EX$$RO_end__ = .;
++    __ER_IROM1_EX$$RO_load_end__ = LOADADDR(.rom_ex) + SIZEOF(.rom_ex);
++
++  } > ROM_EX AT > ROM
++
++  .ARM.extab :
++  {
++    *(.ARM.extab* .gnu.linkonce.armextab.*)
++  } > ROM
++
++  __exidx_start = .;
++  .ARM.exidx :
++  {
++    *(.ARM.exidx* .gnu.linkonce.armexidx.*)
++  } > ROM
++  __exidx_end = .;
++
++  .copy.table :
++  {
++    . = ALIGN(4);
++    __copy_table_start__ = .;
++    LONG (LOADADDR(.data))
++    LONG (ADDR(.data))
++    LONG (SIZEOF(.data))
++
++    LONG (LOADADDR(.retm_data))
++    LONG (ADDR(.retm_data))
++    LONG (SIZEOF(.retm_data))
++
++    LONG (LOADADDR(.rom_ex))
++    LONG (ADDR(.rom_ex))
++    LONG (SIZEOF(.rom_ex))
++
++    __copy_table_end__ = .;
++  } > ROM
++
++  .zero.table :
++  {
++    . = ALIGN(4);
++    __zero_table_start__ = .;
++    /* Add each additional bss section here */
++
++    LONG (__bss_start__)
++    LONG (__bss_end__ - __bss_start__)
++
++    LONG (__rw_retm_bss_start__)
++    LONG (__RW_IRAM_RET$$ZI_end__ - __RW_IRAM_RET$$ZI_start__)
++
++    __zero_table_end__ = .;
++  } > ROM
++
++  .retm_bss :
++  {
++    . = ALIGN(4);
++    __rw_retm_bss_start__ = .;
++    __RW_IRAM_RET$$ZI_start__ = .;
++    * (.bss.retm_bss_*)
++
++    . = ALIGN(4);
++    __RW_IRAM_RET$$ZI_end__ = .;
++  } > RAM
++
++  .RW_IRAM0 :
++  {
++    *(non_ret)
++    *(.*l1_non_ret_data_*)
++    *(.*l1_non_ret_bss_*)
++{% if not defines.get('BSP_USING_PSRAM') %}
++    *(.nand_cache)
++    *(.*l2_non_ret_data_*)
++    *(.*l2_non_ret_bss_*)
++    *(.*l2_cache_non_ret_data_*)
++    *(.*l2_cache_non_ret_bss_*)
++{% endif %}
++  } > RAM
++
++  __etext = ALIGN (4);
++
++  .data :
++  {
++    _sdata = ABSOLUTE(.);
++    __data_start__ = .;
++    __RW_IRAM1_start__ = .;
++    *(vtable)
++    *(.data)
++    *(.data.*)
++    *(.l1_ret_data_*)
++    *(Jlink_RTT)
++
++    . = ALIGN(4);
++    __preinit_array_start = .;
++    KEEP(*(.preinit_array))
++    __preinit_array_end = .;
++
++    . = ALIGN(4);
++    __init_array_start = .;
++    KEEP(*(SORT(.init_array.*)))
++    KEEP(*(.init_array))
++    __init_array_end = .;
++
++    . = ALIGN(4);
++    __fini_array_start = .;
++    KEEP(*(SORT(.fini_array.*)))
++    KEEP(*(.fini_array))
++    __fini_array_end = .;
++
++    /* new GCC version uses .init_array */
++    KEEP(*(SORT(.init_array.*)))
++    KEEP(*(.init_array))
++    _einit = ABSOLUTE(.);
++    PROVIDE_HIDDEN (__init_array_end = .);
++    PROVIDE(__ctors_end__ = .);
++
++    . = ALIGN(4);
++    /* finit data */
++    PROVIDE(__dtors_start__ = .);
++    PROVIDE_HIDDEN (__fini_array_start = .);
++
++    KEEP(*(SORT(.dtors.*)))
++    KEEP(*(.dtors))
++
++    KEEP(*(SORT(.fini_array.*)))
++    KEEP(*(.fini_array))
++    PROVIDE_HIDDEN (__fini_array_end = .);
++    PROVIDE(__dtors_end__ = .);
++
++{% if defines.get('ZBT') %}
++{% include 'zbt_data.jinja2' %}
++{% endif %}
++
++    KEEP(*(.jcr*))
++    . = ALIGN(4);
++    /* All data end */
++    __data_end__ = .;
++    __RW_IRAM1_end__ = .;
++    _edata = ABSOLUTE(.);
++  } > RAM AT > ROM
++
++  __etext2 = ALIGN (4);
++
++{% if defines.get('BSP_USING_PSRAM') %}
++  .RW_PSRAM1 :
++  {
++    . = ALIGN(4);
++    __rw_psram1_start__ = .;
++    *(.*l2_ret_data_*)
++    *(.*l2_ret_bss_*)
++    *(.*l2_cache_ret_data_*)
++    *(.*l2_cache_ret_bss_*)
++    . = ALIGN(4);
++    __rw_psram1_end__ = .;
++
++  } > PSRAM
++
++  .RW_PSRAM_NON_RET :
++  {
++    /* aligned to cache line size */
++    . = ALIGN(32);
++    __RW_PSRAM_NON_RET_start__ = .;
++    *(.nand_cache)
++    *(.*l2_non_ret_data_*)
++    *(.*l2_non_ret_bss_*)
++    *(.*l2_cache_non_ret_data_*)
++    *(.*l2_cache_non_ret_bss_*)
++    . = ALIGN(4);
++    __RW_PSRAM_NON_RET_end__ = .;
++
++  } > PSRAM
++{% endif %}
++
++  .bss :
++  {
++    _sbss = ABSOLUTE(.);
++    . = ALIGN(4);
++    __bss_start__ = .;
++    *(.bss)
++    *(.bss.*)
++    *(COMMON)
++    *(.l1_ret_bss_*)
++    . = ALIGN(4);
++    __bss_end__ = .;
++    __bss_end = .;
++    _ebss = ABSOLUTE(.);
++    __end__ = .;
++    PROVIDE(end = .);
++  } > RAM AT > RAM
++
++  .rom2 :
++  {
++    *(.ROM1_IMG)
++    *(.ROM3_IMG)
++  } > ROM2
++
++  .rom3 :
++  {
++    *lvsf_font_*(.rodata*)
++  } > ROM3
++{% endif %}
++}
++
+diff --git a/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_data.jinja2 b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_data.jinja2
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ab6f6e0c42b27b7670bd0854b03ef3acceb3cea
+--- /dev/null
++++ b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_data.jinja2
+@@ -0,0 +1,3 @@
++    _net_buf_pool_list_start = .; KEEP(*(SORT_BY_NAME(._net_buf_pool.static.*))); _net_buf_pool_list_end = .;
++    _bt_nus_inst_list_start = .; KEEP(*(SORT_BY_NAME(._bt_nus_inst.static.*))); _bt_nus_inst_list_end = .;
++
+diff --git a/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_rom.jinja2 b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_rom.jinja2
+new file mode 100644
+index 0000000000000000000000000000000000000000..b270fe9eca3547b072d178ae6eb97f9819434579
+--- /dev/null
++++ b/drivers/cmsis/sf32lb52x/Templates/gcc/hcpu/zbt_rom.jinja2
+@@ -0,0 +1,115 @@
++{% if defines.get('SETTINGS') %}
++    bt_conn_cb_area : SUBALIGN(4)
++    {
++        _settings_handler_static_list_start = .;
++        KEEP(*(SORT_BY_NAME(._settings_handler_static.static.*)));
++        _settings_handler_static_list_end = .;
++    } > ROM
++{% endif %}
++
++bt_conn_cb_area : SUBALIGN(4)
++{
++    _bt_conn_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_conn_cb.static.*)));
++    _bt_conn_cb_list_end = .;
++} > ROM
++
++{% if defines.get('BT_CONN') %}
++bt_l2cap_fixed_chan_area : SUBALIGN(4)
++{
++    _bt_l2cap_fixed_chan_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_l2cap_fixed_chan.static.*)));
++    _bt_l2cap_fixed_chan_list_end = .;
++} > ROM
++
++bt_gatt_service_static_area : SUBALIGN(4)
++{
++    _bt_gatt_service_static_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_gatt_service_static.static.*)));
++    _bt_gatt_service_static_list_end = .;
++} > ROM
++{% endif %}
++
++{% if defines.get('BT_IAS') %}
++bt_ias_cb_area : SUBALIGN(4)
++{
++    _bt_ias_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_ias_cb.static.*)));
++    _bt_ias_cb_list_end = .;
++} > ROM
++{% endif %}
++
++{% if defines.get('BT_MESH') %}
++bt_mesh_subnet_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_subnet_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_subnet_cb.static.*)));
++    _bt_mesh_subnet_cb_list_end = .;
++} > ROM
++
++bt_mesh_app_key_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_app_key_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_app_key_cb.static.*)));
++    _bt_mesh_app_key_cb_list_end = .;
++} > ROM
++
++bt_mesh_hb_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_hb_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_hb_cb.static.*)));
++    _bt_mesh_hb_cb_list_end = .;
++} > ROM
++
++bt_mesh_friend_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_friend_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_friend_cb.static.*)));
++    _bt_mesh_friend_cb_list_end = .;
++} > ROM
++
++bt_mesh_proxy_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_proxy_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_proxy_cb.static.*)));
++    _bt_mesh_proxy_cb_list_end = .;
++} > ROM
++
++bt_mesh_lpn_cb_area : SUBALIGN(4)
++{
++    _bt_mesh_lpn_cb_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_mesh_lpn_cb.static.*)));
++    _bt_mesh_lpn_cb_list_end = .;
++} > ROM
++{% endif %}
++
++{% if defines.get('SHELL') %}
++shell_area : SUBALIGN(4)
++{
++    _shell_list_start = .;
++    KEEP(*(SORT_BY_NAME(._bt_shell.static.*)));
++    _shell_list_end = .;
++} > ROM
++
++shell_root_cmds_area : SUBALIGN(4)
++{
++    _shell_root_cmds_list_start = .;
++    KEEP(*(SORT_BY_NAME(._shell_root_cmds.static.*)));
++    _shell_root_cmds_list_end = .;
++} > ROM
++
++shell_subcmds_area : SUBALIGN(4)
++{
++    _shell_subcmds_list_start = .;
++    KEEP(*(SORT_BY_NAME(._shell_subcmds.static.*)));
++    _shell_subcmds_list_end = .;
++} > ROM
++
++shell_dynamic_subcmds_area : SUBALIGN(4)
++{
++    _shell_dynamic_subcmds_list_start = .;
++    KEEP(*(SORT_BY_NAME(._shell_dynamic_subcmds.static.*)));
++    _shell_dynamic_subcmds_list_end = .;
++} > ROM
++{% endif %}
++
+diff --git a/drivers/cmsis/sf32lb52x/Templates/gcc/lcpu/link.jinja2 b/drivers/cmsis/sf32lb52x/Templates/gcc/lcpu/link.jinja2
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c9a2bd802263a83ef84303ac204ca92b6f2c04d
+--- /dev/null
++++ b/drivers/cmsis/sf32lb52x/Templates/gcc/lcpu/link.jinja2
+@@ -0,0 +1,163 @@
++/******************************************************************************
++ * @file     gcc_arm.ld
++ * @brief    GNU Linker Script for Cortex-M based device (Jinja2 template)
++ * @version  V2.0.0
++ * @date     21. May 2019
++ ******************************************************************************/
++/*
++ * NOTE:
++ * - This file is rendered by SiFli build system (ptab v3, Jinja2-only).
++ * - Do NOT add C preprocessor directives here (#include/#ifdef/#ifndef...).
++ */
++
++__ROM_BASE = {{ hex32(defines['__ROM_BASE']) }};
++__ROM_SIZE = {{ hex32(defines['__ROM_SIZE']) }};
++
++__RAM_BASE = {{ hex32(defines['__RAM_BASE']) }};
++__RAM_SIZE = {{ hex32(defines['__RAM_SIZE']) }};
++
++__STACK_SIZE = 0x00000400;
++__HEAP_SIZE  = 0x00000000;
++
++MEMORY
++{
++    ROM (rx)  : ORIGIN = __ROM_BASE,  LENGTH = __ROM_SIZE
++    RAM (rw)  : ORIGIN = __RAM_BASE,  LENGTH = __RAM_SIZE
++}
++
++ENTRY(Reset_Handler)
++
++SECTIONS
++{
++  .text :
++  {
++    _stext = ABSOLUTE(.);
++    KEEP(*(.vectors))
++
++    *(.text*)
++    *(.rodata*)
++
++    * (.*l1_ret_text_*)
++    * (.*l1_ret_rodata_*)
++
++    KEEP(*(.init))
++    KEEP(*(.fini))
++
++    /* section information for finsh shell */
++    . = ALIGN(4);
++    __fsymtab_start = .;
++    KEEP(*(FSymTab))
++    __fsymtab_end = .;
++
++    . = ALIGN(4);
++    __vsymtab_start = .;
++    KEEP(*(VSymTab))
++    __vsymtab_end = .;
++
++    . = ALIGN(4);
++    __rt_utest_tc_tab_start = .;
++    KEEP(*(UtestTcTab))
++    __rt_utest_tc_tab_end = .;
++
++    /* section information for initial. */
++    . = ALIGN(4);
++    __rt_init_start = .;
++    KEEP(*(SORT(.rti_fn*)))
++    __rt_init_end = .;
++
++    . = ALIGN(4);
++    __SerialTranExport_start__ = .;
++    KEEP(*(SerialTranExport))
++    __SerialTranExport_end__ = .;
++
++    . = ALIGN(4);
++    __sifli_reg_start__ = .;
++    KEEP(*(SORT(.sifli_reg*)))
++    __sifli_reg_end__ = .;
++
++
++    KEEP(*(.eh_frame*))
++    _etext = ABSOLUTE(.);
++  } > ROM
++
++  .ARM.extab :
++  {
++    *(.ARM.extab* .gnu.linkonce.armextab.*)
++  } > ROM
++
++  __exidx_start = .;
++  .ARM.exidx :
++  {
++    *(.ARM.exidx* .gnu.linkonce.armexidx.*)
++  } > ROM
++  __exidx_end = .;
++
++  .copy.table :
++  {
++    . = ALIGN(4);
++    __copy_table_start__ = .;
++    /* no need to copy .data as it's at the same space as load region */
++    __copy_table_end__ = .;
++  } > ROM
++
++  .zero.table :
++  {
++    . = ALIGN(4);
++    __zero_table_start__ = .;
++    /* Add each additional bss section here */
++
++    LONG (__bss_start__)
++    LONG (__bss_end__ - __bss_start__)
++    __zero_table_end__ = .;
++  } > ROM
++
++  .data :
++  {
++    _sdata = ABSOLUTE(.);
++    __data_start__ = .;
++    *(.data)
++    *(.data.*)
++
++    . = ALIGN(4);
++    __preinit_array_start = .;
++    KEEP(*(.preinit_array))
++    __preinit_array_end = .;
++
++    . = ALIGN(4);
++    __init_array_start = .;
++    KEEP(*(SORT(.init_array.*)))
++    KEEP(*(.init_array))
++    __init_array_end = .;
++
++    . = ALIGN(4);
++    __fini_array_start = .;
++    KEEP(*(SORT(.fini_array.*)))
++    KEEP(*(.fini_array))
++    __fini_array_end = .;
++
++    KEEP(*(.jcr*))
++    . = ALIGN(4);
++    /* All data end */
++    __data_end__ = .;
++    _edata = ABSOLUTE(.);
++  } > RAM AT > ROM
++
++  .bss :
++  {
++    _sbss = ABSOLUTE(.);
++    . = ALIGN(4);
++    __bss_start__ = .;
++    *(.bss)
++    *(.bss.*)
++    *(COMMON)
++    . = ALIGN(4);
++    __bss_end__ = .;
++    __bss_end = .;
++    _ebss = ABSOLUTE(.);
++    __end__ = .;
++    PROVIDE(end = .);
++  } > RAM AT > RAM
++
++  /* ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed with stack") */
++}
++
+diff --git a/example/boot_loader/project/butterflmicro/ram_v2/link.jinja2 b/example/boot_loader/project/butterflmicro/ram_v2/link.jinja2
+new file mode 100644
+index 0000000000000000000000000000000000000000..b37bf18703074d27e1a92a1ff39963f5c1edd6c2
+--- /dev/null
++++ b/example/boot_loader/project/butterflmicro/ram_v2/link.jinja2
+@@ -0,0 +1,200 @@
++/******************************************************************************
++ * @file     gcc_arm.ld
++ * @brief    GNU Linker Script for Cortex-M based device (Jinja2 template)
++ * @version  V2.0.0
++ * @date     21. May 2019
++ ******************************************************************************/
++/*
++ * NOTE:
++ * - This file is rendered by SiFli build system (ptab v3, Jinja2-only).
++ * - Do NOT add C preprocessor directives here (#include/#ifdef/#ifndef...).
++ */
++
++__ROM_BASE = {{ hex32(defines['__ROM_BASE']) }};
++__ROM_SIZE = {{ hex32(defines['__ROM_SIZE']) }};
++
++__RAM_BASE = {{ hex32(defines['__RAM_BASE']) }};
++__RAM_SIZE = {{ hex32(defines['__RAM_SIZE']) }};
++
++__STACK_SIZE = 0x00002000;
++__HEAP_SIZE  = 0x00000C00;
++
++__ROM_EX_BASE = {{ hex32(defines['__ROM_EX_BASE']) }};
++__ROM_EX_SIZE = {{ hex32(defines['__ROM_EX_SIZE']) }};
++
++__PSRAM_BASE = {{ hex32(defines['__PSRAM_BASE']) }};
++__PSRAM_SIZE = {{ hex32(defines['__PSRAM_SIZE']) }};
++
++__ROM2_BASE = {{ hex32(defines['__ROM2_BASE']) }};
++__ROM2_SIZE = {{ hex32(defines['__ROM2_SIZE']) }};
++
++__ROM3_BASE = {{ hex32(defines['__ROM3_BASE']) }};
++__ROM3_SIZE = {{ hex32(defines['__ROM3_SIZE']) }};
++
++MEMORY
++{
++    ROM (rx) : ORIGIN = __ROM_BASE, LENGTH = __ROM_SIZE
++    RAM (rw) : ORIGIN = __RAM_BASE, LENGTH = __RAM_SIZE
++    ROM_EX(rw):ORIGIN = __ROM_EX_BASE, LENGTH = __ROM_EX_SIZE
++    PSRAM(rw): ORIGIN = __PSRAM_BASE, LENGTH = __PSRAM_SIZE
++    ROM2 (rx): ORIGIN = __ROM2_BASE, LENGTH = __ROM2_SIZE
++    ROM3 (rx): ORIGIN = __ROM3_BASE, LENGTH = __ROM3_SIZE
++}
++
++ENTRY(Reset_Handler)
++
++SECTIONS
++{
++  .vectors :
++  {
++    _stext = ABSOLUTE(.);
++    KEEP(*(.vectors));
++    /* workaround to avoid load address of .retm_data doesn't skip .vectors region */
++    . = . + 4;
++  } > ROM
++
++  .stack :
++  {
++    . = ALIGN(8);
++    __StackLimit = .;
++    . = . + __STACK_SIZE;
++    . = ALIGN(8);
++    __StackTop = .;
++  } > RAM
++  PROVIDE(__stack = __StackTop);
++
++  .heap :
++  {
++    . = ALIGN(8);
++    __end__ = .;
++    PROVIDE(end = .);
++    . = . + __HEAP_SIZE;
++    . = ALIGN(8);
++    __HeapLimit = .;
++  } > RAM
++
++  .text :
++  {
++    *(.text*)
++    *(.rodata*)
++
++    KEEP(*(.init))
++    KEEP(*(.fini))
++
++    /* section information for finsh shell */
++    . = ALIGN(4);
++    __fsymtab_start = .;
++    KEEP(*(FSymTab))
++    __fsymtab_end = .;
++
++    . = ALIGN(4);
++    __vsymtab_start = .;
++    KEEP(*(VSymTab))
++    __vsymtab_end = .;
++
++    . = ALIGN(4);
++    LcdDriverDescTab_start = .;
++    KEEP(*(LcdDriverDescTab))
++    LcdDriverDescTab_end = .;
++
++    . = ALIGN(4);
++    __rt_utest_tc_tab_start = .;
++    KEEP(*(UtestTcTab))
++    __rt_utest_tc_tab_end = .;
++
++    /* section information for initial. */
++    . = ALIGN(4);
++    __rt_init_start = .;
++    KEEP(*(SORT(.rti_fn*)))
++    __rt_init_end = .;
++
++    . = ALIGN(4);
++    BuiltinAppTab_start = .;
++    KEEP(*(BuiltinAppTab))
++    BuiltinAppTab_end = .;
++
++    . = ALIGN(4);
++    __app_font_start__ = .;
++    KEEP(*(.app_font))
++    __app_font_end__ = .;
++
++    . = ALIGN(4);
++    __SerialTranExport_start__ = .;
++    KEEP(*(SerialTranExport))
++    __SerialTranExport_end__ = .;
++
++    . = ALIGN(4);
++    __sifli_reg_start__ = .;
++    KEEP(*(SORT(.sifli_reg*)))
++    __sifli_reg_end__ = .;
++
++    . = ALIGN(4);
++    __bt_sifli_reg_start__ = .;
++    KEEP(*(SORT(.bt_sifli_reg*)))
++    __bt_sifli_reg_end__ = .;
++
++    KEEP(*(.eh_frame*))
++    _etext = ABSOLUTE(.);
++  } > ROM
++
++  .ARM.extab :
++  {
++    *(.ARM.extab* .gnu.linkonce.armextab.*)
++  } > ROM
++
++  __exidx_start = .;
++  .ARM.exidx :
++  {
++    *(.ARM.exidx* .gnu.linkonce.armexidx.*)
++  } > ROM
++  __exidx_end = .;
++
++  .copy.table :
++  {
++    . = ALIGN(4);
++    __copy_table_start__ = .;
++    LONG (LOADADDR(.data))
++    LONG (ADDR(.data))
++    LONG (SIZEOF(.data))
++    __copy_table_end__ = .;
++  } > ROM
++
++  .zero.table :
++  {
++    . = ALIGN(4);
++    __zero_table_start__ = .;
++    LONG (__bss_start__)
++    LONG (__bss_end__ - __bss_start__)
++    __zero_table_end__ = .;
++  } > ROM
++
++  .data :
++  {
++    _sdata = ABSOLUTE(.);
++    __data_start__ = .;
++    *(.data)
++    *(.data.*)
++
++    KEEP(*(.jcr*))
++    . = ALIGN(4);
++    __data_end__ = .;
++    _edata = ABSOLUTE(.);
++  } > RAM AT > ROM
++
++  .bss :
++  {
++    _sbss = ABSOLUTE(.);
++    . = ALIGN(4);
++    __bss_start__ = .;
++    *(.bss)
++    *(.bss.*)
++    *(COMMON)
++    . = ALIGN(4);
++    __bss_end__ = .;
++    __bss_end = .;
++    _ebss = ABSOLUTE(.);
++    __end__ = .;
++    PROVIDE(end = .);
++  } > RAM AT > RAM
++}
++
+diff --git a/tools/build/building.py b/tools/build/building.py
+index 1258abfce2a28c88ce809668a8d0afdf70f4fa17..b60e08b17585f6e141f19f93adb44a0e9a72e695 100644
+--- a/tools/build/building.py
++++ b/tools/build/building.py
+@@ -492,15 +492,37 @@ def ProgramAsmBuild(target, source, env):
+     
+ def LdsBuild(target, source, env):
+     import rtconfig
+-    include_paths = ['-I{}'.format(path.replace('\\', '/')) for path in env['CPPPATH']]
++    import ptab as ptab_module
++
++    # Detect ptab version
++    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
++    if ptab_obj is None and 'PARTITION_TABLE' in env:
++        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+ 
+-    target_path = os.path.join(os.path.dirname(str(target[0])), 'link_copy.lds')
++    target_path = str(target[0])
++
++    if ptab_obj and ptab_obj.is_v3():
++        # v3: Jinja2-only rendering (no gcc -E)
++        import gen_link_lds
++
++        build_dir = os.path.dirname(os.path.abspath(target_path))
++        rtconfig_h_path = os.path.join(build_dir, 'rtconfig.h')
++        rtconfig_defines = gen_link_lds._parse_rtconfig_defines(rtconfig_h_path)
++        defines = gen_link_lds.compute_link_defines(
++            ptab_obj,
++            env.get('name', 'main'),
++            getattr(rtconfig, 'CORE', 'HCPU'),
++            rtconfig_defines,
++        )
++        gen_link_lds.render_link_lds(str(source[0]), target_path, defines)
++        return
+ 
++    # v1/v2: legacy gcc -E preprocessing
++    include_paths = ['-I{}'.format(path.replace('\\', '/')) for path in env['CPPPATH']]
+     p = subprocess.Popen([rtconfig.CC, '-E', '-P'] + include_paths + ['-x', 'c', str(source[0])], stdout=subprocess.PIPE)
+     (result, error) = p.communicate()
+-    f = open(target_path, "wb")
+-    f.write(result)
+-    f.close()   
++    with open(target_path, "wb") as f:
++        f.write(result)
+ 
+ def FsBuild(target, source, env):
+     import rtconfig
+@@ -533,10 +555,26 @@ def FsBuild(target, source, env):
+         subprocess.run([env['fs_mkimg'],env['fs_root'],target,str(page_number),str(page_size)], check=True)
+ 
+ def ModifyLdsTargets(target, source, env):
++    import ptab as ptab_module
++
+     target = [os.path.join(env['build_dir'], 'link_copy.lds')]
+     if 'PTAB_HEADER' in env:
+         env.Depends(target, env['PTAB_HEADER'])
+-    
++
++    # v3 requires Jinja2 template (link.jinja2), and must not fallback to gcc -E
++    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
++    if ptab_obj is None and 'PARTITION_TABLE' in env:
++        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
++
++    if ptab_obj and ptab_obj.is_v3():
++        src0 = str(source[0]) if source else ''
++        base, ext = os.path.splitext(src0)
++        template_path = base + '.jinja2'
++        if not os.path.exists(template_path):
++            logging.error(f"ptab v3 requires jinja2 link template: {template_path}")
++            raise SystemExit(1)
++        source = [File(template_path)]
++
+     return target, source
+ 
+ def EmbeddedImgCFileBuild(target, source, env):
+diff --git a/tools/build/gen_ftab.py b/tools/build/gen_ftab.py
+index f8c14176a1f1641429a9326c2340a818e5fc2df8..74870b7b3eec3195a5ab8f92df96288b356f89ec 100644
+--- a/tools/build/gen_ftab.py
++++ b/tools/build/gen_ftab.py
+@@ -104,27 +104,84 @@ def parse_args() -> argparse.Namespace:
+ 
+ def build_partition_table_entries(
+     partitions: List[dict],
+-    chip_config: dict
++    chip_config: dict,
++    chip: Optional[str] = None,
+ ) -> List[Tuple[int, int, int, int]]:
+     """Build partition table entries from ptab partitions.
+ 
+-    对于 accelerate 分区：
+-    - base: 存储地址（flash）
+-    - xip_base: 执行地址（psram 的 xip 地址）
+-    - 下载时使用 base 地址，执行时使用 xip_base 地址
++    v3 address rules:
++    - entry.base uses the "download/storage" view:
++      - NOR: XIP (cbus)
++      - NAND/RAM/PSRAM: base (sbus)
++    - entry.xip_base uses the "execution" view:
++      - default: XIP (cbus)
++      - RAM/NAND: base (sbus)
++    - For app/bootloader partitions with `acc`, xip_base comes from acc.{region,offset}.
+ 
+     Returns:
+         List of (base, size, xip_base, flags) tuples
+     """
+     entries = [(0, 0, 0, 0)] * PARTITION_ENTRY_COUNT
+ 
++    def _mpi_name_from_region(region: str) -> Optional[str]:
++        if not region:
++            return None
++        if region.startswith('mpi'):
++            return region
++        if region.startswith('psram'):
++            if region == 'psram':
++                return 'mpi1'
++            suffix = region.replace('psram', '')
++            if suffix.isdigit():
++                return f'mpi{suffix}'
++        return None
++
++    def _get_region_mem_type(region: str) -> str:
++        if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
++            return 'ram'
++        mpi_name = _mpi_name_from_region(region)
++        if mpi_name:
++            info = chip_config.get('memory_info', {}).get(mpi_name, {})
++            mtype = (info.get('type') or '').lower()
++            return mtype or 'nor'
++        return ''
++
++    def _select_download_addr(region: str, sbus_addr: int, cbus_addr: int) -> int:
++        return cbus_addr if _get_region_mem_type(region) == 'nor' else sbus_addr
++
++    def _select_exec_addr(region: str, sbus_addr: int, cbus_addr: int) -> int:
++        mem_type = _get_region_mem_type(region)
++        return sbus_addr if mem_type in ('ram', 'nand', 'psram') else cbus_addr
++
++    def _get_flash_boot_loader_size_default() -> Optional[int]:
++        try:
++            sifli_sdk = os.getenv('SIFLI_SDK')
++            if not sifli_sdk:
++                # Fallback for offline tools
++                sifli_sdk = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
++            if not sifli_sdk:
++                return None
++            chip_u = (chip or '').upper()
++            if chip_u.startswith('SF32LB52'):
++                cmsis_dir = 'sf32lb52x'
++            else:
++                return None
++            import gen_link_lds
++            mem_ints = gen_link_lds._load_mem_map_ints(sifli_sdk, cmsis_dir)
++            v = mem_ints.get('FLASH_BOOT_LOADER_SIZE')
++            if v is None:
++                return None
++            v = int(v)
++            return v if v > 0 else None
++        except Exception:
++            return None
++
+     # Find key partitions
+     ftab_partition = None
+     calibration_partition = None
+     bootloader_partition = None
+     main_partition = None
+     dfu_partition = None
+-    accelerate_partition = None
+ 
+     for p in partitions:
+         ptype = p.get('type', '')
+@@ -141,8 +198,6 @@ def build_partition_table_entries(
+             main_partition = p
+         elif ptype == 'app' and subtype == 'dfu':
+             dfu_partition = p
+-        elif ptype == 'app' and subtype == 'accelerate':
+-            accelerate_partition = p
+ 
+     # Fill ftab entry
+     if ftab_partition:
+@@ -150,11 +205,7 @@ def build_partition_table_entries(
+         region = ftab_partition.get('region', '')
+         offset = ptab_module.parse_size(ftab_partition.get('offset', 0))
+         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-        
+-        # Select base address based on memory type
+-        memory_info = chip_config.get('memory_info', {}).get(region, {})
+-        mem_type = memory_info.get('type', '').lower()
+-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
++        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
+         
+         entries[PartitionIndex.FLASH_PARTITION_TABLE] = (base_addr, size, 0, 0)
+ 
+@@ -164,81 +215,82 @@ def build_partition_table_entries(
+         region = calibration_partition.get('region', '')
+         offset = ptab_module.parse_size(calibration_partition.get('offset', 0))
+         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-        
+-        # Select base address based on memory type
+-        memory_info = chip_config.get('memory_info', {}).get(region, {})
+-        mem_type = memory_info.get('type', '').lower()
+-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
++        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
+         
+         entries[PartitionIndex.CALIBRATION_TABLE] = (base_addr, size, 0, 0)
+ 
+     # Fill bootloader entry
+     if bootloader_partition:
+-        size = ptab_module.parse_size(bootloader_partition.get('size', 0))
++        storage_size = ptab_module.parse_size(bootloader_partition.get('size', 0))
++        size = _get_flash_boot_loader_size_default()
++        if size is None:
++            size = storage_size
++        elif storage_size > size:
++            size = storage_size
+         region = bootloader_partition.get('region', '')
+         offset = ptab_module.parse_size(bootloader_partition.get('offset', 0))
+         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-        
+-        # Select base address based on memory type
+-        memory_info = chip_config.get('memory_info', {}).get(region, {})
+-        mem_type = memory_info.get('type', '').lower()
+-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
++        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
++
++        acc = bootloader_partition.get('acc')
++        if not isinstance(acc, dict):
++            raise ValueError("bootloader partition must provide acc for ftab generation")
+ 
+-        exec_region = bootloader_partition.get('exec_region', region)
+-        exec_offset = ptab_module.parse_size(bootloader_partition.get('exec_offset', offset))
++        exec_region = str(acc.get('region', '')).strip()
++        exec_offset = ptab_module.parse_size(acc.get('offset', 0))
+         exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
+-        
+-        # XIP address: RAM/NAND use base, PSRAM/NOR use XIP
+-        exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
+-        exec_mem_type = exec_memory_info.get('type', '').lower()
+-        xip_addr = exec_sbus_addr if exec_mem_type in ('ram', 'nand') else exec_cbus_addr
++        xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
+ 
+         entries[PartitionIndex.BOOTLOADER] = (base_addr, size, xip_addr, 0)
+         entries[PartitionIndex.BOOTLOADER_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
+ 
+     # Fill main entry
+-    # For main partition, if accelerate partition exists, use accelerate's xip address
+     if main_partition:
+         region = main_partition.get('region', '')
+         offset = ptab_module.parse_size(main_partition.get('offset', 0))
+         size = ptab_module.parse_size(main_partition.get('size', 0))
+         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-        
+-        # Select base address based on memory type
+-        memory_info = chip_config.get('memory_info', {}).get(region, {})
+-        mem_type = memory_info.get('type', '').lower()
+-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+-
+-        # Check if accelerate partition is used for execution address
+-        if accelerate_partition:
+-            # accelerate partition: stored in flash, executed in psram
+-            # ftab's xip_base should be accelerate partition's xip address
+-            acc_region = accelerate_partition.get('region', '')
+-            acc_offset = ptab_module.parse_size(accelerate_partition.get('offset', 0))
+-            acc_sbus_addr, acc_cbus_addr = ptab_module.resolve_region_address(acc_region, acc_offset, chip_config)
+-            
+-            # XIP address for execution
+-            acc_memory_info = chip_config.get('memory_info', {}).get(acc_region, {})
+-            acc_mem_type = acc_memory_info.get('type', '').lower()
+-            xip_addr = acc_sbus_addr if acc_mem_type in ('ram', 'nand') else acc_cbus_addr
+-        elif main_partition.get('exec_region'):
+-            exec_region = main_partition.get('exec_region', region)
+-            exec_offset = ptab_module.parse_size(main_partition.get('exec_offset', offset))
++        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
++
++        acc = main_partition.get('acc')
++        if isinstance(acc, dict):
++            exec_region = str(acc.get('region', '')).strip()
++            exec_offset = ptab_module.parse_size(acc.get('offset', 0))
+             exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
+-            
+-            # XIP address: RAM/NAND use base, PSRAM/NOR use XIP
+-            exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
+-            exec_mem_type = exec_memory_info.get('type', '').lower()
+-            xip_addr = exec_sbus_addr if exec_mem_type in ('ram', 'nand') else exec_cbus_addr
++            xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
+         else:
+-            # Default XIP execution
+-            xip_sbus_addr, xip_cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-            # Use base for NAND/RAM, XIP for PSRAM/NOR
+-            xip_addr = xip_sbus_addr if mem_type in ('ram', 'nand') else xip_cbus_addr
++            # No acc: allow XIP for NOR/PSRAM; NAND must provide acc
++            mem_type = _get_region_mem_type(region)
++            if mem_type == 'nand':
++                raise ValueError("app.factory partition on NAND must provide acc for ftab generation")
++            xip_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
+ 
+         entries[PartitionIndex.HCPU_IMAGE] = (base_addr, size, xip_addr, 0)
+         entries[PartitionIndex.HCPU_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
+ 
++    # Fill dfu entry (optional)
++    if dfu_partition:
++        region = dfu_partition.get('region', '')
++        offset = ptab_module.parse_size(dfu_partition.get('offset', 0))
++        size = ptab_module.parse_size(dfu_partition.get('size', 0))
++        sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
++        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
++
++        acc = dfu_partition.get('acc')
++        if isinstance(acc, dict):
++            exec_region = str(acc.get('region', '')).strip()
++            exec_offset = ptab_module.parse_size(acc.get('offset', 0))
++            exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
++            xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
++        else:
++            mem_type = _get_region_mem_type(region)
++            if mem_type == 'nand':
++                raise ValueError("app.dfu partition on NAND must provide acc for ftab generation")
++            xip_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
++
++        entries[PartitionIndex.LCPU_IMAGE_PING] = (base_addr, size, xip_addr, 0)
++        entries[PartitionIndex.LCPU_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
++
+     return entries
+ 
+ 
+@@ -281,7 +333,7 @@ def build_image_descriptions(
+ 
+     # Sizes array: index = Flash ID - 2
+     sizes = [
+-        0xFFFFFFFF,      # [0] LCPU (not used in most configs)
++        dfu_size if dfu_size > 0 else 0xFFFFFFFF,  # [0] LCPU/DFU image
+         bootloader_size, # [1] Bootloader
+         main_size,       # [2] HCPU (main app)
+         0xFFFFFFFF,      # [3] Boot
+@@ -303,7 +355,7 @@ def build_image_descriptions(
+     return bytes(desc)
+ 
+ 
+-def build_image_index_table(flash_base: int) -> bytes:
++def build_image_index_table(flash_base: int, dfu_present: bool = False) -> bytes:
+     """Build image index table
+ 
+     Image Index entries point to image descriptions by CORE_* index:
+@@ -322,7 +374,7 @@ def build_image_index_table(flash_base: int) -> bytes:
+ 
+     # Index corresponds to CORE_* enum
+     entries = [
+-        0xFFFFFFFF,                                   # [0] LCPU - not used
++        base_offset + 0 * IMAGE_DESCRIPTION_SIZE if dfu_present else 0xFFFFFFFF,  # [0] LCPU/DFU
+         base_offset + 1 * IMAGE_DESCRIPTION_SIZE,    # [1] Bootloader → imgs[1]
+         base_offset + 2 * IMAGE_DESCRIPTION_SIZE,    # [2] HCPU → imgs[2]
+         0xFFFFFFFF,                                   # [3] Boot - not used
+@@ -341,7 +393,7 @@ def generate_ftab_binary(
+     # Get partitions from v3 ptab
+     partitions = ptab_obj.partitions
+ 
+-    # Get flash base for ftab (select based on memory type)
++    # Get flash base for ftab (download/storage view)
+     flash_base = 0
+     for p in partitions:
+         ptype = p.get('type', '')
+@@ -349,15 +401,16 @@ def generate_ftab_binary(
+             region = p.get('region', '')
+             offset = ptab_module.parse_size(p.get('offset', 0))
+             sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+-            
+-            # Select base address based on memory type
+-            memory_info = chip_config.get('memory_info', {}).get(region, {})
+-            mem_type = memory_info.get('type', '').lower()
+-            flash_base = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
++            # Reuse the same selection rule as partition table entries
++            mpi_name = region if region.startswith('mpi') else None
++            if region.startswith('psram'):
++                mpi_name = 'mpi1' if region == 'psram' else 'mpi{}'.format(region.replace('psram', '') or '1')
++            mem_type = (chip_config.get('memory_info', {}).get(mpi_name or region, {}).get('type') or 'nor').lower()
++            flash_base = cbus_addr if mem_type == 'nor' else sbus_addr
+             break
+ 
+     # Build components
+-    entries = build_partition_table_entries(partitions, chip_config)
++    entries = build_partition_table_entries(partitions, chip_config, getattr(ptab_obj, 'chip', None))
+     partition_table = pack_partition_table(entries)
+     image_descriptions = build_image_descriptions(bootloader_size, main_size)
+     image_index_table = build_image_index_table(flash_base)
+diff --git a/tools/build/gen_link_lds.py b/tools/build/gen_link_lds.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..afea6cdadd142b69fb45ecf7f86d710396ed74b5
+--- /dev/null
++++ b/tools/build/gen_link_lds.py
+@@ -0,0 +1,457 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: Apache-2.0
++
++import ast
++import os
++import re
++from typing import Any, Dict, Optional, Sequence, Tuple
++
++from jinja2 import Environment, FileSystemLoader, StrictUndefined
++
++import ptab as ptab_module
++
++
++class LinkLdsError(RuntimeError):
++    pass
++
++
++def hex32(value: int) -> str:
++    return '0x{:08X}'.format(value & 0xFFFFFFFF)
++
++
++def _safe_eval_int(expr: str) -> int:
++    """Evaluate a C-like integer expression safely.
++
++    Supported:
++    - hex/dec literals
++    - +, -, *, /, //, %, <<, >>, |, &, ^
++    - unary +/-
++    - parentheses
++
++    Note: Identifiers are not supported in this helper.
++    """
++    expr = (expr or '').strip()
++    if not expr:
++        raise LinkLdsError('Empty expression')
++
++    # Strip outer parentheses to reduce noise like "((0x12000000))"
++    while expr.startswith('(') and expr.endswith(')'):
++        inner = expr[1:-1].strip()
++        if not inner:
++            break
++        expr = inner
++
++    tree = ast.parse(expr, mode='eval')
++
++    def _eval(node: ast.AST) -> int:
++        if isinstance(node, ast.Expression):
++            return _eval(node.body)
++        if isinstance(node, ast.Constant):
++            if isinstance(node.value, bool):
++                return int(node.value)
++            if isinstance(node.value, int):
++                return node.value
++            raise LinkLdsError('Unsupported constant: {}'.format(type(node.value)))
++        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
++            v = _eval(node.operand)
++            return +v if isinstance(node.op, ast.UAdd) else -v
++        if isinstance(node, ast.BinOp):
++            left = _eval(node.left)
++            right = _eval(node.right)
++            op = node.op
++            if isinstance(op, ast.Add):
++                return left + right
++            if isinstance(op, ast.Sub):
++                return left - right
++            if isinstance(op, ast.Mult):
++                return left * right
++            if isinstance(op, ast.Div):
++                return int(left / right)
++            if isinstance(op, ast.FloorDiv):
++                return left // right
++            if isinstance(op, ast.Mod):
++                return left % right
++            if isinstance(op, ast.LShift):
++                return left << right
++            if isinstance(op, ast.RShift):
++                return left >> right
++            if isinstance(op, ast.BitOr):
++                return left | right
++            if isinstance(op, ast.BitAnd):
++                return left & right
++            if isinstance(op, ast.BitXor):
++                return left ^ right
++            raise LinkLdsError('Unsupported binary operator: {}'.format(type(op)))
++        raise LinkLdsError('Unsupported expression node: {}'.format(type(node)))
++
++    return int(_eval(tree))
++
++
++def _parse_define_map(header_path: str) -> Dict[str, str]:
++    """Parse simple `#define NAME VALUE` lines into a raw string map.
++
++    Only the last definition wins.
++    """
++    define_re = re.compile(r'^\s*#\s*define\s+([A-Za-z_]\w*)\s*(.*)$')
++    out: Dict[str, str] = {}
++    try:
++        with open(header_path, 'r', encoding='utf-8', errors='ignore') as f:
++            for line in f:
++                m = define_re.match(line)
++                if not m:
++                    continue
++                name = m.group(1)
++                value = (m.group(2) or '').strip()
++                # Drop trailing comments
++                value = value.split('//', 1)[0].strip()
++                out[name] = value
++    except FileNotFoundError:
++        return out
++    return out
++
++
++def _parse_rtconfig_defines(rtconfig_h_path: str) -> Dict[str, Any]:
++    """Parse rtconfig.h into a dict usable by Jinja2.
++
++    - `#define FOO 1` -> 1
++    - `#define BAR` -> 1
++    - non-numeric values kept as strings
++    """
++    raw = _parse_define_map(rtconfig_h_path)
++    out: Dict[str, Any] = {}
++    for k, v in raw.items():
++        if v == '':
++            out[k] = 1
++            continue
++        # Typical Kconfig output uses 1/0 or strings.
++        try:
++            out[k] = int(v, 0)
++            continue
++        except Exception:
++            pass
++        out[k] = v
++    return out
++
++
++def _infer_cmsis_dir_from_chip(chip: str) -> str:
++    chip = (chip or '').upper()
++    if chip.startswith('SF32LB52'):
++        return 'sf32lb52x'
++    raise LinkLdsError('Unsupported chip for Jinja2 link generation: {}'.format(chip))
++
++
++def _load_mem_map_ints(sifli_sdk_root: str, cmsis_dir: str) -> Dict[str, int]:
++    mem_map_path = os.path.join(sifli_sdk_root, 'drivers', 'cmsis', cmsis_dir, 'mem_map.h')
++    wanted = {
++        # Flash2 layout (used by HCPU link script)
++        'QSPI2_MEM_BASE',
++        'HCPU_FLASH2_IMG_SIZE',
++        'HCPU_FLASH2_FONT_SIZE',
++        # Bootloader runtime size
++        'FLASH_BOOT_LOADER_SIZE',
++        # Mailbox sizes
++        'HPSYS_MBOX_BUF_SIZE',
++        'LPSYS_MBOX_BUF_SIZE',
++        # LCPU RAM view
++        'LPSYS_RAM_BASE',
++        'LPSYS_RAM_CBUS_BASE',
++        'LPSYS_RAM_SIZE',
++        'LCPU_RAM_CODE_SIZE',
++    }
++
++    raw = _parse_define_map(mem_map_path)
++    out: Dict[str, int] = {}
++    for name in wanted:
++        if name not in raw:
++            continue
++        try:
++            out[name] = _safe_eval_int(raw[name])
++        except Exception as e:
++            raise LinkLdsError('Failed to eval {} from {}: {} ({})'.format(name, mem_map_path, raw[name], e))
++    return out
++
++
++def _mpi_name_from_region(region: str) -> Optional[str]:
++    region = (region or '').strip().lower()
++    if not region:
++        return None
++    if region.startswith('mpi'):
++        return region
++    psram_match = re.match(r'^psram(\d+)?$', region)
++    if psram_match:
++        mpi_num = psram_match.group(1) or '1'
++        return 'mpi{}'.format(mpi_num)
++    return None
++
++
++def _get_region_mem_type(region: str, chip_config: Dict[str, Any]) -> str:
++    region = (region or '').strip().lower()
++    if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
++        return 'ram'
++    mpi_name = _mpi_name_from_region(region)
++    if mpi_name:
++        info = chip_config.get('memory_info', {}).get(mpi_name, {})
++        mtype = (info.get('type') or '').lower()
++        return mtype or 'nor'
++    return ''
++
++
++def _select_start_addr(mem_type: str, sbus_addr: int, cbus_addr: int) -> int:
++    return cbus_addr if mem_type == 'nor' else sbus_addr
++
++
++def _select_exec_addr(mem_type: str, sbus_addr: int, cbus_addr: int) -> int:
++    return sbus_addr if mem_type in ('ram', 'nand', 'psram') else cbus_addr
++
++
++def _get_hpsys_ram_hcpu(chip_config: Dict[str, Any]) -> Tuple[int, int]:
++    ram = ((chip_config.get('ram') or {}).get('hpsys') or {}).get('ram') or {}
++    base: Optional[int] = None
++    total = 0
++    for _, bank in ram.items():
++        hcpu = bank.get('hcpu') or {}
++        off = hcpu.get('offset')
++        size = hcpu.get('size')
++        if off is None or size is None:
++            continue
++        if base is None:
++            base = int(off)
++        total += int(size)
++    if base is None:
++        base = 0x20000000
++    return base, total
++
++
++def _get_lpsys_ram(chip_config: Dict[str, Any]) -> Tuple[int, int, int]:
++    ram = ((chip_config.get('ram') or {}).get('lpsys') or {}).get('ram') or {}
++    base_hcpu: Optional[int] = None
++    base_lcpu: Optional[int] = None
++    total: Optional[int] = None
++    for _, bank in ram.items():
++        hcpu = bank.get('hcpu') or {}
++        lcpu = bank.get('lcpu') or {}
++        if base_hcpu is None and hcpu.get('offset') is not None:
++            base_hcpu = int(hcpu.get('offset'))
++        if base_lcpu is None and lcpu.get('offset') is not None:
++            base_lcpu = int(lcpu.get('offset'))
++        if total is None and hcpu.get('size') is not None:
++            total = int(hcpu.get('size'))
++    if base_hcpu is None:
++        base_hcpu = 0x20400000
++    if base_lcpu is None:
++        base_lcpu = 0x00400000
++    if total is None:
++        total = 0x6000
++    return base_hcpu, base_lcpu, total
++
++
++def _find_partition(partitions, *, ptype: Optional[str] = None, subtype: Optional[str] = None,
++                    name: Optional[str] = None, core: Optional[str] = None) -> Optional[Dict[str, Any]]:
++    for p in partitions:
++        if not isinstance(p, dict):
++            continue
++        if ptype and p.get('type') != ptype:
++            continue
++        if subtype and p.get('subtype') != subtype:
++            continue
++        if name and (p.get('name') or '').lower() != name.lower():
++            continue
++        if core:
++            pcore = (p.get('core') or 'HCPU').upper()
++            if pcore != core.upper():
++                continue
++        return p
++    return None
++
++
++def _match_partition_by_alias(partitions, alias_base: str) -> Optional[Dict[str, Any]]:
++    alias_base = (alias_base or '').strip().upper()
++    if not alias_base:
++        return None
++    for p in partitions:
++        aliases = p.get('aliases') or []
++        for a in aliases:
++            if str(a).strip().upper() == alias_base:
++                return p
++    return None
++
++
++def compute_link_defines(ptab_obj, build_name: str, build_core: str, rtconfig_defines: Dict[str, Any]) -> Dict[str, Any]:
++    if not ptab_obj or not hasattr(ptab_obj, 'is_v3') or not ptab_obj.is_v3():
++        raise LinkLdsError('compute_link_defines only supports ptab v3')
++
++    sifli_sdk_root = os.getenv('SIFLI_SDK') or os.getcwd()
++    cmsis_dir = _infer_cmsis_dir_from_chip(getattr(ptab_obj, 'chip', ''))
++
++    chip_config = ptab_obj.get_chip_config()
++    partitions = ptab_obj.partitions
++
++    mem_map_ints = _load_mem_map_ints(sifli_sdk_root, cmsis_dir)
++
++    # Default RAM windows from SiliconSchema
++    hpsys_base, hpsys_total = _get_hpsys_ram_hcpu(chip_config)
++    lpsys_base_hcpu, lpsys_base_lcpu, lpsys_total = _get_lpsys_ram(chip_config)
++
++    hpsys_mbox_size = int(mem_map_ints.get('HPSYS_MBOX_BUF_SIZE', 0x400))
++    lpsys_mbox_size = int(mem_map_ints.get('LPSYS_MBOX_BUF_SIZE', 0x400))
++
++    hcpu_ram_base = hpsys_base
++    hcpu_ram_size = max(0, int(hpsys_total) - hpsys_mbox_size)
++    hcpu_rom_ex_base = hcpu_ram_base + hcpu_ram_size
++
++    lcpu_ram_base = lpsys_base_hcpu
++    lcpu_ram_size = max(0, int(lpsys_total) - lpsys_mbox_size)
++    lcpu_rom_base = lpsys_base_lcpu
++    lcpu_rom_size = int(mem_map_ints.get('LCPU_RAM_CODE_SIZE', 0)) * 2
++
++    # Flash2 resource windows (static for sf32lb52x)
++    rom2_base = int(mem_map_ints.get('QSPI2_MEM_BASE', 0x12000000))
++    rom2_size = int(mem_map_ints.get('HCPU_FLASH2_IMG_SIZE', 0))
++    rom3_base = rom2_base + rom2_size
++    rom3_size = int(mem_map_ints.get('HCPU_FLASH2_FONT_SIZE', 0))
++
++    # PSRAM window from ptab (optional)
++    psram_part = (
++        _match_partition_by_alias(partitions, 'PSRAM_DATA')
++        or _find_partition(partitions, name='psram_data')
++    )
++    if psram_part:
++        psram_region = psram_part.get('region', '')
++        psram_offset = ptab_module.parse_size(psram_part.get('offset', 0))
++        psram_size = ptab_module.parse_size(psram_part.get('size', 0))
++        psram_sbus, psram_cbus = ptab_module.resolve_region_address(psram_region, psram_offset, chip_config, core=psram_part.get('core'))
++        psram_mem_type = _get_region_mem_type(psram_region, chip_config)
++        psram_base = _select_start_addr(psram_mem_type, psram_sbus, psram_cbus)
++    else:
++        psram_base = 0
++        psram_size = 0
++
++    # Pick ROM region for current build
++    build_name = (build_name or '').strip().lower()
++    build_core = (build_core or 'HCPU').strip().upper()
++
++    rom_base = 0
++    rom_size = 0
++
++    if build_name == 'bootloader':
++        boot_p = _find_partition(partitions, ptype='bootloader', core=build_core)
++        if not boot_p:
++            boot_p = _find_partition(partitions, ptype='bootloader')
++        if not boot_p:
++            raise LinkLdsError('bootloader partition not found in ptab v3')
++        acc = boot_p.get('acc')
++        if not isinstance(acc, dict):
++            raise LinkLdsError('bootloader partition requires acc for link script')
++        acc_region = str(acc.get('region', '')).strip()
++        acc_offset = ptab_module.parse_size(acc.get('offset', 0))
++        exec_sbus, exec_cbus = ptab_module.resolve_region_address(acc_region, acc_offset, chip_config, core=boot_p.get('core'))
++        mem_type = _get_region_mem_type(acc_region, chip_config)
++        rom_base = _select_exec_addr(mem_type, exec_sbus, exec_cbus)
++        rom_size = int(mem_map_ints.get('FLASH_BOOT_LOADER_SIZE', 0))
++        if rom_size <= 0:
++            rom_size = ptab_module.parse_size(boot_p.get('size', 0))
++    elif build_core == 'LCPU':
++        rom_base = lcpu_rom_base
++        rom_size = lcpu_rom_size
++    else:
++        # main/dfu or named images (HCPU)
++        code_p = None
++        if build_name == 'main':
++            code_p = _find_partition(partitions, ptype='app', subtype='factory', core=build_core)
++            if not code_p:
++                code_p = _find_partition(partitions, ptype='app', subtype='factory')
++        elif build_name == 'dfu':
++            code_p = _find_partition(partitions, ptype='app', subtype='dfu', core=build_core)
++            if not code_p:
++                code_p = _find_partition(partitions, ptype='app', subtype='dfu')
++        if not code_p and build_name:
++            code_p = _find_partition(partitions, name=build_name)
++        if not code_p:
++            raise LinkLdsError('code partition not found for build: {}'.format(build_name))
++
++        size = ptab_module.parse_size(code_p.get('size', 0))
++        acc = code_p.get('acc')
++        core = code_p.get('core')
++        if isinstance(acc, dict):
++            acc_region = str(acc.get('region', '')).strip()
++            acc_offset = ptab_module.parse_size(acc.get('offset', 0))
++            exec_sbus, exec_cbus = ptab_module.resolve_region_address(acc_region, acc_offset, chip_config, core=core)
++            mem_type = _get_region_mem_type(acc_region, chip_config)
++            rom_base = _select_exec_addr(mem_type, exec_sbus, exec_cbus)
++        else:
++            region = code_p.get('region', '')
++            offset = ptab_module.parse_size(code_p.get('offset', 0))
++            exec_sbus, exec_cbus = ptab_module.resolve_region_address(region, offset, chip_config, core=core)
++            mem_type = _get_region_mem_type(region, chip_config)
++            rom_base = _select_exec_addr(mem_type, exec_sbus, exec_cbus)
++        rom_size = size
++
++    # Pick RAM region for current build
++    if build_name == 'bootloader':
++        ram_part = (
++            _match_partition_by_alias(partitions, 'BOOTLOADER_RAM_DATA')
++            or _find_partition(partitions, name='bootloader_ram_data')
++            or _find_partition(partitions, name='bootloader_ram')
++        )
++        if ram_part:
++            region = ram_part.get('region', '')
++            offset = ptab_module.parse_size(ram_part.get('offset', 0))
++            size = ptab_module.parse_size(ram_part.get('size', 0))
++            sbus, cbus = ptab_module.resolve_region_address(region, offset, chip_config, core=ram_part.get('core'))
++            mem_type = _get_region_mem_type(region, chip_config)
++            ram_base = _select_start_addr(mem_type, sbus, cbus)
++            ram_size = size
++        else:
++            ram_base, ram_size = hcpu_ram_base, hcpu_ram_size
++    elif build_core == 'LCPU':
++        ram_base, ram_size = lcpu_ram_base, lcpu_ram_size
++    else:
++        ram_base, ram_size = hcpu_ram_base, hcpu_ram_size
++
++    out: Dict[str, Any] = dict(rtconfig_defines or {})
++    out['__ROM_BASE'] = int(rom_base)
++    out['__ROM_SIZE'] = int(rom_size)
++    out['__RAM_BASE'] = int(ram_base)
++    out['__RAM_SIZE'] = int(ram_size)
++    out['__ROM_EX_BASE'] = int(hcpu_rom_ex_base if build_core == 'HCPU' else 0)
++    out['__ROM_EX_SIZE'] = 0
++    out['__PSRAM_BASE'] = int(psram_base)
++    out['__PSRAM_SIZE'] = int(psram_size)
++    out['__ROM2_BASE'] = int(rom2_base)
++    out['__ROM2_SIZE'] = int(rom2_size)
++    out['__ROM3_BASE'] = int(rom3_base)
++    out['__ROM3_SIZE'] = int(rom3_size)
++    return out
++
++
++def render_link_lds(template_path: str, output_path: str, defines: Dict[str, Any], search_paths: Optional[Sequence[str]] = None) -> None:
++    template_path = os.path.abspath(str(template_path))
++    output_path = os.path.abspath(str(output_path))
++
++    template_dir = os.path.dirname(template_path)
++    sifli_sdk_root = os.getenv('SIFLI_SDK') or os.getcwd()
++
++    loader_paths = list(search_paths or [])
++    loader_paths = [os.path.abspath(p) for p in loader_paths if p]
++    # Always search template dir first, then repo root.
++    for p in (template_dir, sifli_sdk_root):
++        ap = os.path.abspath(p)
++        if ap not in loader_paths:
++            loader_paths.append(ap)
++
++    env = Environment(
++        loader=FileSystemLoader(loader_paths),
++        undefined=StrictUndefined,
++        keep_trailing_newline=True,
++        autoescape=False,
++    )
++    env.filters['hex32'] = hex32
++    env.globals['hex32'] = hex32
++
++    # Load by basename; includes are resolved via loader paths.
++    template = env.get_template(os.path.basename(template_path))
++    rendered = template.render(defines=defines)
++
++    os.makedirs(os.path.dirname(output_path), exist_ok=True)
++    with open(output_path, 'w', encoding='utf-8', newline='\n') as f:
++        f.write(rendered)
+diff --git a/tools/build/migrate_ptab_to_v3.py b/tools/build/migrate_ptab_to_v3.py
+index 1bb20aec6f41545606f31787d3da30bfd96b43c2..9de21cc2190bc189930b710fc95b00c614453b93 100644
+--- a/tools/build/migrate_ptab_to_v3.py
++++ b/tools/build/migrate_ptab_to_v3.py
+@@ -1,77 +1,57 @@
+ #!/usr/bin/env python3
+-# Copyright (c) 2025 SiFli Technologies(Nanjing) Co., Ltd
+ # SPDX-License-Identifier: Apache-2.0
+ 
+ """
+-Migrate ptab.json (v1/v2) to ptab.yaml (v3) format.
++Migrate legacy ptab.json (v1/v2) to ptab.yaml (v3).
++
++This tool focuses on keeping build compatibility:
++- Converts regions to v3 `partitions` with `type/subtype/region/offset/size`.
++- Converts exec-only regions (region has `exec` but no `img`) into `acc` on the
++  corresponding `bootloader/app` partition.
++- Uses legacy `tags` as `aliases` (dedup, case-insensitive) when needed.
+ 
+ Usage:
+-    python migrate_ptab_to_v3.py --input ptab.json --output ptab.yaml --chip SF32LB52
++  python3 tools/build/migrate_ptab_to_v3.py -i customer/boards/<board>/ptab.json -o /tmp/ptab.yaml -c SF32LB52JUD6
+ """
+ 
+-from __future__ import annotations
+-
+ import argparse
++import os
+ import json
+ import re
+ import sys
+ from collections import OrderedDict
+-from pathlib import Path
+-from typing import Dict, List, Optional
++from typing import Any, Dict, List, Optional, Tuple
+ 
+ import yaml
+ 
+ 
+-def parse_args() -> argparse.Namespace:
++def _parse_args() -> argparse.Namespace:
+     parser = argparse.ArgumentParser(
+-        description="Migrate ptab.json (v1/v2) to ptab.yaml (v3)",
+-        allow_abbrev=False
+-    )
+-    parser.add_argument(
+-        "--input", "-i",
+-        required=True,
+-        help="Path to input ptab.json file"
+-    )
+-    parser.add_argument(
+-        "--output", "-o",
+-        help="Path to output ptab.yaml file (default: same dir, .yaml extension)"
++        description='Migrate ptab.json (v1/v2) to ptab.yaml (v3)',
++        allow_abbrev=False,
+     )
++    parser.add_argument('-i', '--input', required=True, help='Input ptab.json path')
++    parser.add_argument('-o', '--output', help='Output ptab.yaml path (default: stdout)')
+     parser.add_argument(
+-        "--chip", "-c",
+-        default="SF32LB52",
+-        help="Chip series name (default: SF32LB52)"
+-    )
+-    parser.add_argument(
+-        "--dry-run", "-n",
+-        action="store_true",
+-        help="Print output to stdout instead of writing file"
++        '-c', '--chip',
++        default='SF32LB52JUD6',
++        help='Chip part number for ptab v3 (default: SF32LB52JUD6)',
+     )
++    parser.add_argument('--no-header', action='store_true', help='Do not emit header comments')
+     return parser.parse_args()
+ 
+ 
+-def load_v1v2_ptab(path: Path) -> tuple:
+-    """Load v1/v2 ptab.json and return (version, mems)"""
+-    with open(path) as f:
++def _load_ptab_json(path: str) -> List[Dict[str, Any]]:
++    with open(path, 'r', encoding='utf-8') as f:
+         data = json.load(f, object_pairs_hook=OrderedDict)
+-
+     if not isinstance(data, list):
+-        raise ValueError("Invalid ptab format: expected list")
+-
+-    # Check for version header
+-    if data and isinstance(data[0], dict) and 'version' in data[0]:
+-        version = str(data[0]['version'])
+-        mems = data[1:]
+-    else:
+-        version = "1"
+-        mems = data
++        raise ValueError('Invalid ptab.json: expected a list')
++    return data
+ 
+-    return version, mems
+ 
+-
+-def infer_region_from_mem(mem_name: str) -> str:
+-    """Infer v3 region name from v1/v2 mem name"""
+-    # Common mappings
+-    mappings = {
++def _mem_to_region(mem_name: str) -> str:
++    mem_name = (mem_name or '').strip().lower()
++    mapping = {
+         'flash1': 'mpi1',
+         'flash2': 'mpi2',
+         'flash3': 'mpi3',
+@@ -79,202 +59,271 @@ def infer_region_from_mem(mem_name: str) -> str:
+         'flash5': 'mpi5',
+         'psram1': 'psram1',
+         'psram1_cbus': 'psram1',
++        'psram2': 'psram2',
+         'hpsys_ram': 'hpsys_ram',
+         'lpsys_ram': 'lpsys_ram',
+     }
+-    return mappings.get(mem_name, mem_name)
+-
+-
+-def infer_type_subtype(region_data: dict) -> tuple:
+-    """Infer type and subtype from v1/v2 region data"""
+-    name = region_data.get('name', '')
+-    tags = region_data.get('tags', [])
+-    ftab = region_data.get('ftab', {})
+-    type_list = region_data.get('type', [])
+-
+-    ptype = None
+-    subtype = None
+-
+-    # Check for ftab name
+-    ftab_name = ftab.get('name', '') if isinstance(ftab, dict) else ''
+-
+-    if name == 'ftab' or ftab_name == 'ftab' or 'FLASH_TABLE' in tags:
+-        ptype = 'ptab'
+-        subtype = 'primary'
+-    elif name == 'bootloader' or ftab_name == 'bootloader' or 'FLASH_BOOT_LOADER' in tags:
+-        ptype = 'bootloader'
+-    elif name == 'dfu' or ftab_name == 'dfu' or 'DFU' in str(tags):
+-        ptype = 'app'
+-        subtype = 'dfu'
+-    elif name == 'main' or ftab_name == 'main':
+-        ptype = 'app'
+-        subtype = 'factory'
+-    elif 'app_img' in type_list or 'app_exec' in type_list:
+-        ptype = 'app'
+-        # Check for int_res indicators
+-        if any('IMG' in t or 'FONT' in t for t in tags):
+-            subtype = 'int_res'
+-        else:
+-            subtype = 'factory'
+-    elif any('FS_' in t or 'KVDB' in t for t in tags):
+-        ptype = 'data'
+-        subtype = 'nvds'
+-    elif any('RAM_DATA' in t for t in tags):
+-        ptype = 'data'
+-        subtype = 'ram'
+-    else:
+-        # Default to data for unknown
+-        ptype = 'data'
+-
+-    return ptype, subtype
+-
+-
+-def convert_to_v3(version: str, mems: list, chip: str) -> dict:
+-    """Convert v1/v2 mems to v3 format"""
+-    v3 = {
+-        'version': 3,
+-        'chip': chip,
+-        'partitions': []
+-    }
+-
+-    # Track which partitions we've seen (for exec regions)
+-    seen_partitions = {}
+-
+-    for mem in mems:
+-        mem_name = mem.get('mem', '')
+-        region = infer_region_from_mem(mem_name)
+-
+-        for region_data in mem.get('regions', []):
+-            tags = region_data.get('tags', [])
+-            name = region_data.get('name', '')
+-            type_list = region_data.get('type', [])
+-
+-            # Skip empty regions with no meaningful data
+-            if not name and not tags and not region_data.get('ftab'):
++    return mapping.get(mem_name, mem_name)
++
++
++def _sanitize_name(name: str) -> str:
++    name = (name or '').strip().lower()
++    name = re.sub(r'[^a-z0-9_]', '_', name)
++    if not name:
++        return name
++    if name[0].isdigit():
++        name = 'p_' + name
++    return name
++
++
++def _dedup_aliases(aliases: List[str], canonical_name: str) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    canonical_upper = (canonical_name or '').upper()
++    for a in aliases or []:
++        a = str(a or '').strip()
++        if not a:
++            continue
++        up = a.upper()
++        if up == canonical_upper:
++            continue
++        if up in seen:
++            continue
++        seen.add(up)
++        out.append(a)
++    return out
++
++
++def _infer_type_subtype_core(region: str, region_data: Dict[str, Any]) -> Tuple[str, Optional[str], Optional[str]]:
++    tags = region_data.get('tags') or []
++    tags = [str(t) for t in tags if str(t).strip()]
++    img = str(region_data.get('img') or '').strip().lower()
++    ftab = region_data.get('ftab') if isinstance(region_data.get('ftab'), dict) else {}
++    ftab_name = str(ftab.get('name') or '').strip().lower()
++
++    tags_upper = [t.upper() for t in tags]
++
++    # ftab
++    if 'FLASH_TABLE' in tags_upper or img == 'ftab' or ftab_name == 'ftab':
++        return 'ftab', None, None
++
++    # bootloader
++    if img == 'bootloader' or ftab_name == 'bootloader' or 'FLASH_BOOT_LOADER' in tags_upper:
++        return 'bootloader', None, 'HCPU'
++
++    # app (factory/dfu)
++    if 'DFU_FLASH_CODE' in tags_upper or img == 'dfu' or ftab_name == 'dfu':
++        return 'app', 'dfu', 'HCPU'
++    if 'HCPU_FLASH_CODE' in tags_upper or img == 'main' or ftab_name == 'main':
++        return 'app', 'factory', 'HCPU'
++
++    # filesystem / nvds
++    if 'FS_REGION' in tags_upper:
++        return 'data', 'filesystem', None
++    if any(t.startswith('KVDB_') for t in tags_upper):
++        return 'data', 'nvds', None
++
++    # RAM-like regions
++    if region in ('hpsys_ram', 'lpsys_ram') or region.startswith('psram'):
++        return 'data', 'ram', None
++
++    # default
++    return 'data', 'raw', None
++
++
++def _infer_partition_name(region_data: Dict[str, Any]) -> str:
++    tags = region_data.get('tags') or []
++    tags = [str(t) for t in tags if str(t).strip()]
++    img = str(region_data.get('img') or '').strip().lower()
++    ftab = region_data.get('ftab') if isinstance(region_data.get('ftab'), dict) else {}
++    ftab_name = str(ftab.get('name') or '').strip().lower()
++
++    # Prefer first tag as it maps to legacy macro base names.
++    if tags:
++        return _sanitize_name(tags[0])
++    if ftab_name:
++        return _sanitize_name(ftab_name)
++    if img:
++        return _sanitize_name(img)
++    return ''
++
++
++def migrate_ptab_json_to_v3(ptab_json: List[Dict[str, Any]], chip: str) -> Dict[str, Any]:
++    # Map exec-only regions: exec_name -> {region, offset}
++    exec_only: Dict[str, Dict[str, Any]] = {}
++
++    # Collect all regions first
++    regions_flat: List[Tuple[str, Dict[str, Any]]] = []
++    for mem in ptab_json:
++        if not isinstance(mem, dict):
++            continue
++        region = _mem_to_region(mem.get('mem'))
++        for r in mem.get('regions') or []:
++            if not isinstance(r, dict):
+                 continue
+-
+-            # Skip pure exec regions (they'll be merged with img regions)
+-            if 'app_exec' in type_list and 'app_img' not in type_list:
+-                # This is an exec-only region, find the corresponding img region
+-                if name and name in seen_partitions:
+-                    # Add exec_region/exec_offset to existing partition
+-                    partition = seen_partitions[name]
+-                    partition['exec_region'] = region
+-                    partition['exec_offset'] = region_data.get('offset', '0')
++            regions_flat.append((region, r))
++
++            exec_name = str(r.get('exec') or '').strip()
++            img_name = str(r.get('img') or '').strip()
++            if exec_name and not img_name:
++                # exec-only region (acc source)
++                exec_only[exec_name] = {
++                    'region': region,
++                    'offset': r.get('offset', '0'),
++                }
++
++    partitions: List[Dict[str, Any]] = []
++
++    for region, r in regions_flat:
++        # Skip exec-only regions; they'll be converted into acc
++        if r.get('exec') and not r.get('img'):
++            continue
++
++        # Skip zero-sized regions
++        try:
++            if int(str(r.get('max_size', '0')), 0) == 0:
+                 continue
+-
+-            # Infer type/subtype
+-            ptype, subtype = infer_type_subtype(region_data)
+-
+-            # Generate name if missing
+-            if not name:
+-                if tags:
+-                    # Use first tag as name, convert to lowercase
+-                    name = tags[0].lower().replace('_start_addr', '').replace('_size', '')
+-                else:
+-                    name = f"unnamed_{len(v3['partitions'])}"
+-
+-            # Clean up name for v3 format (lowercase, underscores only)
+-            name = re.sub(r'[^a-z0-9_]', '_', name.lower())
+-            if name[0].isdigit():
+-                name = 'p_' + name
+-
+-            partition = {
+-                'name': name,
+-                'type': ptype,
+-                'region': region,
+-                'offset': region_data.get('offset', '0'),
+-                'size': region_data.get('max_size', '0'),
+-            }
+-
+-            if subtype:
+-                partition['subtype'] = subtype
+-
+-            # Check for exec address in ftab
+-            ftab = region_data.get('ftab', {})
+-            if isinstance(ftab, dict) and 'address' in ftab:
+-                if 'xip' in ftab['address'] and 'base' not in ftab['address']:
+-                    # This is a pure XIP region
+-                    pass
+-
+-            # Add core if present
+-            if 'core' in region_data:
+-                partition['core'] = region_data['core']
+-
+-            # Store for later reference
+-            if name:
+-                seen_partitions[name] = partition
+-
+-            v3['partitions'].append(partition)
+-
+-    return v3
+-
+-
+-class OrderedDumper(yaml.SafeDumper):
+-    """YAML dumper that preserves order and uses nice formatting"""
++        except Exception:
++            pass
++
++        # Legacy ptab.json may contain overlapping "macro regions" in internal RAM.
++        # For v3 we only keep non-overlapping partitions by default.
++        tags = r.get('tags') or []
++        tags_upper = [str(t).strip().upper() for t in tags if str(t).strip()]
++        if region in ('hpsys_ram', 'lpsys_ram'):
++            if any(t in (
++                'HCPU_RAM_DATA',
++                'HCPU_RO_DATA',
++                'HPSYS_MBOX',
++                'HCPU2LCPU_MB_CH2_BUF',
++                'HCPU2LCPU_MB_CH1_BUF',
++                'LCPU2HCPU_MB_CH1_BUF',
++                'LCPU2HCPU_MB_CH2_BUF',
++            ) for t in tags_upper):
++                # Keep BOOTLOADER_RAM_DATA and LPSYS_RAM as they are typically non-overlapping.
++                if 'BOOTLOADER_RAM_DATA' not in tags_upper and 'LPSYS_RAM' not in tags_upper:
++                    continue
++
++        name = _infer_partition_name(r)
++        if not name:
++            continue
++
++        offset = r.get('offset', '0')
++        size = r.get('max_size', '0')
++
++        ptype, subtype, core = _infer_type_subtype_core(region, r)
++
++        # Build aliases from legacy tags
++        tags = [str(t) for t in tags if str(t).strip()]
++        aliases = _dedup_aliases(tags, name)
++
++        part: Dict[str, Any] = OrderedDict()
++        part['name'] = name
++        part['type'] = ptype
++        if subtype:
++            part['subtype'] = subtype
++        part['region'] = region
++        part['offset'] = offset
++        part['size'] = size
++        if core:
++            part['core'] = core
++        if aliases:
++            part['aliases'] = aliases
++
++        # Convert exec-only region into acc for bootloader/app partitions
++        if ptype in ('bootloader', 'app'):
++            # Determine image name to search for exec-only mapping.
++            img_name = str(r.get('img') or '').strip()
++            if img_name and img_name in exec_only:
++                acc_src = exec_only[img_name]
++                part['acc'] = OrderedDict([
++                    ('region', acc_src.get('region', '')),
++                    ('offset', acc_src.get('offset', '0')),
++                ])
++
++        partitions.append(part)
++
++    # Auto-add calibration partition for common layouts (compat with legacy ftab)
++    has_calibration = False
++    flash_table_part: Optional[Dict[str, Any]] = None
++    for p in partitions:
++        if p.get('type') == 'ftab':
++            flash_table_part = p
++        if p.get('type') == 'data' and p.get('subtype') == 'calibration':
++            has_calibration = True
++
++    if flash_table_part and not has_calibration:
++        try:
++            flash_off = int(str(flash_table_part.get('offset', '0')), 0)
++        except Exception:
++            flash_off = 0
++        try:
++            flash_size = int(str(flash_table_part.get('size', '0')), 0)
++        except Exception:
++            flash_size = 0x8000
++        cal_off = flash_off + flash_size
++        cal_part: Dict[str, Any] = OrderedDict()
++        cal_part['name'] = 'calibration'
++        cal_part['type'] = 'data'
++        cal_part['subtype'] = 'calibration'
++        cal_part['region'] = flash_table_part.get('region', 'mpi2')
++        cal_part['offset'] = '0x{:08X}'.format(cal_off)
++        cal_part['size'] = '0x{:08X}'.format(0x2000)
++        # Insert right after flash table for readability
++        idx = partitions.index(flash_table_part) + 1
++        partitions.insert(idx, cal_part)
++
++    out: Dict[str, Any] = OrderedDict()
++    out['version'] = 3
++    out['chip'] = chip
++    out['partitions'] = partitions
++    return out
++
++
++class _OrderedDumper(yaml.SafeDumper):
+     pass
+ 
+ 
+-def str_representer(dumper, data):
+-    """Represent strings, using | for multiline"""
+-    if '\n' in data:
+-        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+-    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+-
+-
+-def ordered_dict_representer(dumper, data):
++def _ordered_dict_representer(dumper: yaml.Dumper, data: OrderedDict) -> yaml.nodes.MappingNode:
+     return dumper.represent_mapping('tag:yaml.org,2002:map', data.items())
+ 
+ 
+-OrderedDumper.add_representer(str, str_representer)
+-OrderedDumper.add_representer(OrderedDict, ordered_dict_representer)
++_OrderedDumper.add_representer(OrderedDict, _ordered_dict_representer)
+ 
+ 
+-def main() -> None:
+-    args = parse_args()
++def main() -> int:
++    args = _parse_args()
+ 
+-    input_path = Path(args.input)
+-    if not input_path.exists():
+-        print(f"Error: Input file not found: {input_path}")
+-        sys.exit(1)
++    ptab_json = _load_ptab_json(args.input)
++    v3 = migrate_ptab_json_to_v3(ptab_json, args.chip)
+ 
+-    # Load v1/v2 ptab
+-    version, mems = load_v1v2_ptab(input_path)
+-    print(f"Loaded ptab v{version} from {input_path}")
+-
+-    # Convert to v3
+-    v3_data = convert_to_v3(version, mems, args.chip)
+-    print(f"Converted {len(v3_data['partitions'])} partitions")
+-
+-    # Generate YAML output
+-    yaml_output = yaml.dump(
+-        v3_data,
+-        Dumper=OrderedDumper,
++    yaml_body = yaml.dump(
++        v3,
++        Dumper=_OrderedDumper,
+         default_flow_style=False,
+         allow_unicode=True,
+         sort_keys=False,
+-        indent=2
++        indent=2,
+     )
+ 
+-    # Add header comment
+-    header = f"""\
+-# ptab v3 - Partition Table
+-# Migrated from: {input_path.name}
+-# Chip: {args.chip}
+-#
+-# This file was auto-generated. Please review and adjust as needed.
+-
+-"""
+-    yaml_output = header + yaml_output
+-
+-    if args.dry_run:
+-        print("\n--- Generated ptab.yaml ---")
+-        print(yaml_output)
++    if not args.no_header:
++        header = (
++            '# ptab v3 - Partition Table\n'
++            '# Migrated from: {}\n'
++            '# Chip: {}\n'
++            '#\n'
++            '# Auto-generated. Please review and adjust as needed.\n\n'
++        ).format(os.path.basename(args.input), args.chip)
++        yaml_body = header + yaml_body
++
++    if args.output:
++        with open(args.output, 'w', encoding='utf-8', newline='\n') as f:
++            f.write(yaml_body)
++        print('Written to: {}'.format(args.output))
+     else:
+-        output_path = Path(args.output) if args.output else input_path.with_suffix('.yaml')
+-        output_path.write_text(yaml_output)
+-        print(f"Written to: {output_path}")
++        sys.stdout.write(yaml_body)
++    return 0
+ 
+ 
+-if __name__ == "__main__":
+-    main()
++if __name__ == '__main__':
++    raise SystemExit(main())
+diff --git a/tools/build/ptab.py b/tools/build/ptab.py
+index 203e6839e21a5c0bd7a90ea990831ad0fd473948..eb46128a5f5fc7e15869396f8afd04038c47b1b1 100644
+--- a/tools/build/ptab.py
++++ b/tools/build/ptab.py
+@@ -60,14 +60,23 @@ class Ptab:
+ 
+ 
+ class PtabV3:
+-    """ptab v3 格式解析器，使用 YAML 格式"""
++    """ptab v3 格式解析器，使用 YAML 格式
++
++    Notes:
++    - v3 uses YAML dict with top-level keys: version/chip/memory/partitions
++    - Execution address is described by `acc: {region, offset}` (preferred).
++      For backward compatibility, `exec_region/exec_offset` are accepted as
++      deprecated aliases and will be normalized into `acc`.
++    - `aliases` is used to generate legacy macro base names and to provide
++      compatibility with v1/v2 projects.
++    """
+ 
+     def __init__(self, path, data):
+         self.path = os.path.abspath(path)
+         self._data = data
+         self._version = str(data.get('version', '3'))
+         self._chip = data.get('chip', '')
+-        self._partitions = data.get('partitions', [])
++        self._partitions = self._normalize_partitions(data.get('partitions', []))
+         self._memory = data.get('memory', [])  # 外部存储配置
+         self._chip_config = None
+ 
+@@ -97,6 +106,86 @@ class PtabV3:
+     def partitions(self):
+         return copy.deepcopy(self._partitions)
+ 
++    def _normalize_partitions(self, partitions):
++        """Normalize partitions to the canonical v3 shape.
++
++        Canonical fields:
++        - name/type/subtype/region/offset/size/core/attrs/aliases/acc
++        """
++        if not isinstance(partitions, list):
++            return []
++
++        normalized = []
++        for p in partitions:
++            if not isinstance(p, dict):
++                continue
++
++            name = (p.get('name') or '').strip()
++            ptype = (p.get('type') or '').strip()
++            subtype = (p.get('subtype') or '').strip() or None
++
++            region = (p.get('region') or '').strip()
++            if region == 'psram':
++                region = 'psram1'
++
++            offset = p.get('offset', 0)
++            size = p.get('size', 0)
++
++            core = (p.get('core') or '').strip() or None
++
++            # attrs: keep as-is but only allow dict
++            attrs = p.get('attrs')
++            if not isinstance(attrs, dict):
++                attrs = {}
++
++            # aliases: list[str]
++            aliases = p.get('aliases')
++            if aliases is None:
++                aliases_list = []
++            elif isinstance(aliases, list):
++                aliases_list = [str(x).strip() for x in aliases if str(x).strip()]
++            else:
++                aliases_list = [str(aliases).strip()] if str(aliases).strip() else []
++
++            # acc: canonical execution address
++            acc = None
++            if isinstance(p.get('acc'), dict):
++                acc_region = (p['acc'].get('region') or '').strip()
++                if acc_region == 'psram':
++                    acc_region = 'psram1'
++                acc_offset = p['acc'].get('offset', 0)
++                if acc_region:
++                    acc = {'region': acc_region, 'offset': acc_offset}
++            else:
++                # Backward compatible deprecated fields
++                exec_region = (p.get('exec_region') or '').strip()
++                if exec_region == 'psram':
++                    exec_region = 'psram1'
++                if exec_region:
++                    acc = {'region': exec_region, 'offset': p.get('exec_offset', 0)}
++
++            out = {
++                'name': name,
++                'type': ptype,
++                'region': region,
++                'offset': offset,
++                'size': size,
++            }
++            if subtype:
++                out['subtype'] = subtype
++            if core:
++                out['core'] = core
++            if attrs:
++                out['attrs'] = attrs
++            if aliases_list:
++                out['aliases'] = aliases_list
++            if acc:
++                out['acc'] = acc
++
++            normalized.append(out)
++
++        return normalized
++
+     def is_v2(self):
+         return False
+ 
+@@ -167,23 +256,48 @@ class PtabV3:
+         series = self.chip_series
+         if not series:
+             return []
+-        
+-        chip_file = Path(__file__).parent.parent / 'SiliconSchema' / 'chips' / f'{series.upper()}x' / 'chip.yaml'
+-        if not chip_file.exists():
+-            return []
+-        
++
++        chips_root = Path(__file__).parent.parent / 'SiliconSchema' / 'chips'
++
++        # Known naming patterns in this repo:
++        # - SF32LB52x/chip.yaml
++        # - SF32LB52_X/chip.yaml
++        preferred_dirs = [
++            chips_root / f'{series.upper()}x',
++            chips_root / f'{series.upper()}_X',
++        ]
++
++        # Also scan any matching directories for robustness
++        scan_dirs = []
+         try:
+-            with open(chip_file) as f:
+-                chip_data = yaml.safe_load(f)
++            for d in chips_root.iterdir():
++                if not d.is_dir():
++                    continue
++                if d.name.upper().startswith(series.upper()):
++                    scan_dirs.append(d)
+         except Exception:
+-            return []
+-        
+-        # 在 variants 中查找匹配的型号
+-        variants = chip_data.get('variants', [])
+-        for variant in variants:
+-            if variant.get('part_number', '').upper() == self._chip.upper():
+-                return variant.get('memory', [])
+-        
++            scan_dirs = []
++
++        checked = []
++        for d in preferred_dirs + scan_dirs:
++            chip_file = d / 'chip.yaml'
++            if not chip_file.exists():
++                continue
++            if chip_file in checked:
++                continue
++            checked.append(chip_file)
++
++            try:
++                with open(chip_file) as f:
++                    chip_data = yaml.safe_load(f)
++            except Exception:
++                continue
++
++            variants = chip_data.get('variants', [])
++            for variant in variants:
++                if variant.get('part_number', '').upper() == self._chip.upper():
++                    return variant.get('memory', []) or []
++
+         return []
+ 
+     def content_mems(self, clone=True):
+@@ -201,13 +315,22 @@ class PtabV3:
+                 continue
+ 
+             # 获取 region 基地址
+-            sbus_addr, _ = resolve_region_address(region, 0, chip_config)
++            core = partition.get('core')
++            sbus_base, cbus_base = resolve_region_address(region, 0, chip_config, core=core)
++
++            # Select a "download/storage" base address to mimic v1/v2 behaviour
++            mem_type = _get_region_memory_type(region, chip_config).lower()
++            if mem_type == 'nor':
++                mem_base = cbus_base
++            else:
++                mem_base = sbus_base
++
+             mem_name = region
+ 
+             if mem_name not in mems_dict:
+                 mems_dict[mem_name] = {
+                     'mem': mem_name,
+-                    'base': '0x{:08X}'.format(sbus_addr),
++                    'base': '0x{:08X}'.format(mem_base),
+                     'regions': []
+                 }
+ 
+@@ -218,10 +341,25 @@ class PtabV3:
+             ptype = partition.get('type', '')
+             subtype = partition.get('subtype', '')
+ 
++            # Collect tags for v1/v2 compatibility.
++            tags = []
++            for alias in partition.get('aliases', []) or []:
++                alias = str(alias).strip()
++                if alias:
++                    tags.append(alias)
++
++            # Always include NAME as a tag for convenience.
++            if name:
++                tags.append(name.upper())
++
++            # Auto-add FS_REGION tag for filesystem partitions (used by some builders)
++            if ptype == 'data' and subtype in ('littlefs', 'fat', 'fatfs', 'flashdb', 'filesystem'):
++                tags.append('FS_REGION')
++
+             region_entry = {
+                 'offset': '0x{:08X}'.format(offset),
+                 'max_size': '0x{:08X}'.format(size),
+-                'tags': [name.upper()] if name else [],
++                'tags': tags,
+                 'name': name,
+             }
+ 
+@@ -229,7 +367,10 @@ class PtabV3:
+             type_list = []
+             if ptype in ('bootloader', 'app'):
+                 type_list.append('app_img')
+-            if partition.get('exec_region') or partition.get('exec_offset') is not None:
++
++            acc = partition.get('acc')
++            if ptype == 'app' and not acc:
++                # XIP case: execution region is the storage region itself
+                 type_list.append('app_exec')
+             if type_list:
+                 region_entry['type'] = type_list
+@@ -239,29 +380,43 @@ class PtabV3:
+ 
+             mems_dict[mem_name]['regions'].append(region_entry)
+ 
+-            # 如果有 exec_region，添加执行区域
+-            exec_region = partition.get('exec_region')
+-            if exec_region and exec_region != region:
+-                exec_offset = parse_size(partition.get('exec_offset', 0))
+-                exec_sbus_addr, _ = resolve_region_address(exec_region, 0, chip_config)
+-
+-                if exec_region not in mems_dict:
+-                    mems_dict[exec_region] = {
+-                        'mem': exec_region,
+-                        'base': '0x{:08X}'.format(exec_sbus_addr),
+-                        'regions': []
++            # If `acc` is present and differs from storage, add an exec-only region.
++            if acc and isinstance(acc, dict):
++                exec_region = (acc.get('region') or '').strip()
++                if exec_region == 'psram':
++                    exec_region = 'psram1'
++                if exec_region and exec_region != region:
++                    exec_offset = parse_size(acc.get('offset', 0))
++                    exec_sbus_base, exec_cbus_base = resolve_region_address(exec_region, 0, chip_config, core=core)
++
++                    exec_mem_type = _get_region_memory_type(exec_region, chip_config).lower()
++                    if exec_mem_type == 'nor':
++                        exec_mem_base = exec_cbus_base
++                    else:
++                        exec_mem_base = exec_sbus_base
++
++                    if exec_region not in mems_dict:
++                        mems_dict[exec_region] = {
++                            'mem': exec_region,
++                            'base': '0x{:08X}'.format(exec_mem_base),
++                            'regions': []
++                        }
++
++                    exec_tags = []
++                    if ptype == 'bootloader':
++                        # For v1/v2 compatibility, bootloader exec region is tagged.
++                        exec_tags.append('FLASH_BOOT_LOADER')
++
++                    exec_entry = {
++                        'offset': '0x{:08X}'.format(exec_offset),
++                        'max_size': '0x{:08X}'.format(size),
++                        'tags': exec_tags,
++                        'name': name,
++                        'type': ['app_exec']
+                     }
+-
+-                exec_entry = {
+-                    'offset': '0x{:08X}'.format(exec_offset),
+-                    'max_size': '0x{:08X}'.format(size),
+-                    'tags': [],
+-                    'name': name,
+-                    'type': ['app_exec']
+-                }
+-                if partition.get('core'):
+-                    exec_entry['core'] = partition['core']
+-                mems_dict[exec_region]['regions'].append(exec_entry)
++                    if partition.get('core'):
++                        exec_entry['core'] = partition['core']
++                    mems_dict[exec_region]['regions'].append(exec_entry)
+ 
+         mems = list(mems_dict.values())
+         return copy.deepcopy(mems) if clone else mems
+@@ -359,7 +514,8 @@ def load_chip_config(chip_series: str) -> Dict[str, Any]:
+ def resolve_region_address(
+     region: str,
+     offset: int,
+-    chip_config: Dict[str, Any]
++    chip_config: Dict[str, Any],
++    core: Optional[str] = None,
+ ) -> Tuple[int, int]:
+     """解析 region 到物理地址
+ 
+@@ -374,6 +530,12 @@ def resolve_region_address(
+     mpi_config = chip_config.get('mpi', {})
+     ram_config = chip_config.get('ram', {})
+ 
++    core_key = None
++    if core:
++        core_lower = str(core).lower()
++        if core_lower in ('hcpu', 'lcpu', 'acpu'):
++            core_key = core_lower
++
+     # MPI region
+     if region in mpi_config:
+         mpi = mpi_config[region]
+@@ -390,8 +552,12 @@ def resolve_region_address(
+     if region == 'hpsys_ram' or region.startswith('hpsys'):
+         hpsys = ram_config.get('hpsys', {})
+         ram = hpsys.get('ram', {})
+-        # 使用第一个 ram bank 的 hcpu offset 作为基地址
+-        for bank_name, bank in ram.items():
++        # 使用第一个 ram bank 的 offset 作为基地址（按 core 选择）
++        for _, bank in ram.items():
++            if core_key and core_key in bank:
++                base_offset = bank.get(core_key, {}).get('offset')
++                if base_offset is not None:
++                    return base_offset + offset, base_offset + offset
+             hcpu = bank.get('hcpu', {})
+             base_offset = hcpu.get('offset', 0x20000000)
+             return base_offset + offset, base_offset + offset
+@@ -401,7 +567,11 @@ def resolve_region_address(
+     if region == 'lpsys_ram' or region.startswith('lpsys'):
+         lpsys = ram_config.get('lpsys', {})
+         ram = lpsys.get('ram', {})
+-        for bank_name, bank in ram.items():
++        for _, bank in ram.items():
++            if core_key and core_key in bank:
++                base_offset = bank.get(core_key, {}).get('offset')
++                if base_offset is not None:
++                    return base_offset + offset, base_offset + offset
+             hcpu = bank.get('hcpu', {})
+             base_offset = hcpu.get('offset', 0x20400000)
+             return base_offset + offset, base_offset + offset
+@@ -428,6 +598,36 @@ def resolve_region_address(
+     return offset, offset
+ 
+ 
++def _get_region_memory_type(region: str, chip_config: Dict[str, Any]) -> str:
++    """Get memory type for a region.
++
++    For mpi/psram regions, consult chip_config['memory_info'] by canonical mpi name.
++    For RAM regions, returns 'ram'.
++    """
++    if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
++        return 'ram'
++
++    # Normalize psram aliases to mpiN
++    psram_match = re.match(r'^psram(\d+)?$', region)
++    if psram_match:
++        mpi_num = psram_match.group(1) or '1'
++        region = f'mpi{mpi_num}'
++
++    memory_info = chip_config.get('memory_info', {})
++    info = memory_info.get(region, {})
++    mtype = info.get('type')
++    if mtype is not None:
++        return str(mtype)
++
++    # Default heuristic: when memory type is not specified for an mpi region,
++    # treat it as NOR for backward compatibility (v1/v2 commonly use XIP
++    # address as the "base" for flash regions).
++    if re.match(r'^mpi\d+$', region):
++        return 'nor'
++
++    return ''
++
++
+ def _parse_ptab_file(path):
+     """解析 ptab 文件（JSON 格式）"""
+     with open(path) as f:
+diff --git a/tools/build/ptab_v3_regression.py b/tools/build/ptab_v3_regression.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..218a0e9cc926897ec959d8c4a691cbbbf7cbcace
+--- /dev/null
++++ b/tools/build/ptab_v3_regression.py
+@@ -0,0 +1,409 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: Apache-2.0
++
++"""
++ptab v3 regression (offline, strict numeric compare)
++
++This script compares key artifacts produced by legacy ptab.json (v1/v2) build
++artifacts vs regenerated outputs from migrated ptab.yaml (v3):
++- ptab.h (numeric macro values)
++- link_copy.lds (numeric values of __ROM_BASE/__RAM_BASE/... assignments)
++- ftab.bin (partition entries: base/size/xip_base/flags)
++
++It does NOT require running full SCons builds (use prebuilt baseline artifacts).
++
++Example:
++  python3 tools/build/ptab_v3_regression.py --board sf32lb52-nano_52j --chip SF32LB52JUD6
++"""
++
++import argparse
++import ast
++import os
++import re
++import struct
++import sys
++import tempfile
++import types
++from typing import Any, Dict, List, Optional, Tuple
++
++
++SEC_CONFIG_MAGIC = 0x53454346  # 'FCES'
++PARTITION_ENTRY_COUNT = 16
++PARTITION_ENTRY_STRUCT = struct.Struct('<IIII')
++
++
++def _repo_root() -> str:
++    sifli = os.getenv('SIFLI_SDK')
++    if sifli:
++        return os.path.abspath(sifli)
++    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
++
++
++def _parse_args() -> argparse.Namespace:
++    parser = argparse.ArgumentParser(allow_abbrev=False)
++    parser.add_argument('--board', default='sf32lb52-nano_52j', help='Board name (without _hcpu suffix)')
++    parser.add_argument('--chip', default='SF32LB52JUD6', help='Chip part number used for migrated ptab v3')
++    parser.add_argument(
++        '--baseline-build-dir',
++        default=None,
++        help='Baseline HCPU build dir (default: example/misc/button/project/build_<board>_hcpu)',
++    )
++    parser.add_argument('--keep-tmp', action='store_true', help='Keep generated files (print tmp dir)')
++    return parser.parse_args()
++
++
++class _EvalError(RuntimeError):
++    pass
++
++
++def _safe_eval_int(expr: str) -> int:
++    expr = (expr or '').strip()
++    if not expr:
++        raise _EvalError('Empty expression')
++
++    # Strip trailing semicolons and outer parentheses
++    expr = expr.rstrip(';').strip()
++    while expr.startswith('(') and expr.endswith(')'):
++        inner = expr[1:-1].strip()
++        if not inner:
++            break
++        expr = inner
++
++    tree = ast.parse(expr, mode='eval')
++
++    def _eval(node: ast.AST) -> int:
++        if isinstance(node, ast.Expression):
++            return _eval(node.body)
++        if isinstance(node, ast.Constant):
++            if isinstance(node.value, bool):
++                return int(node.value)
++            if isinstance(node.value, int):
++                return node.value
++            raise _EvalError('Unsupported constant: {}'.format(type(node.value)))
++        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
++            v = _eval(node.operand)
++            return +v if isinstance(node.op, ast.UAdd) else -v
++        if isinstance(node, ast.BinOp):
++            left = _eval(node.left)
++            right = _eval(node.right)
++            op = node.op
++            if isinstance(op, ast.Add):
++                return left + right
++            if isinstance(op, ast.Sub):
++                return left - right
++            if isinstance(op, ast.Mult):
++                return left * right
++            if isinstance(op, ast.Div):
++                return int(left / right)
++            if isinstance(op, ast.FloorDiv):
++                return left // right
++            if isinstance(op, ast.Mod):
++                return left % right
++            if isinstance(op, ast.LShift):
++                return left << right
++            if isinstance(op, ast.RShift):
++                return left >> right
++            if isinstance(op, ast.BitOr):
++                return left | right
++            if isinstance(op, ast.BitAnd):
++                return left & right
++            if isinstance(op, ast.BitXor):
++                return left ^ right
++            raise _EvalError('Unsupported op: {}'.format(type(op)))
++        raise _EvalError('Unsupported node: {}'.format(type(node)))
++
++    return int(_eval(tree))
++
++
++def _parse_c_defines(path: str) -> Dict[str, str]:
++    define_re = re.compile(r'^\s*#\s*define\s+([A-Za-z_]\w*)\s+(.*)$')
++    out: Dict[str, str] = {}
++    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
++        for line in f:
++            m = define_re.match(line)
++            if not m:
++                continue
++            name = m.group(1)
++            expr = (m.group(2) or '').strip()
++            expr = expr.split('//', 1)[0].strip()
++            out[name] = expr
++    return out
++
++
++def _eval_define(name: str, defs: Dict[str, str], cache: Dict[str, int]) -> int:
++    if name in cache:
++        return cache[name]
++    if name not in defs:
++        raise _EvalError('Unknown macro: {}'.format(name))
++    expr = defs[name]
++
++    # Simple reference case
++    ref_match = re.fullmatch(r'\(?\s*([A-Za-z_]\w*)\s*\)?', expr)
++    if ref_match and ref_match.group(1) in defs:
++        v = _eval_define(ref_match.group(1), defs, cache)
++        cache[name] = v
++        return v
++
++    # Replace identifiers with evaluated values
++    tokens = set(re.findall(r'\b[A-Za-z_]\w*\b', expr))
++    expanded = expr
++    for tok in sorted(tokens, key=len, reverse=True):
++        if tok not in defs:
++            continue
++        v = _eval_define(tok, defs, cache)
++        expanded = re.sub(r'\b{}\b'.format(re.escape(tok)), str(v), expanded)
++
++    v2 = _safe_eval_int(expanded)
++    cache[name] = v2
++    return v2
++
++
++def _collect_macro_values(path: str) -> Dict[str, int]:
++    defs = _parse_c_defines(path)
++    cache: Dict[str, int] = {}
++    out: Dict[str, int] = {}
++    for k in defs.keys():
++        try:
++            out[k] = _eval_define(k, defs, cache)
++        except Exception:
++            # Skip non-numeric macros
++            continue
++    return out
++
++
++def _parse_lds_assignments(path: str) -> Dict[str, int]:
++    assign_re = re.compile(r'^\s*(__[A-Za-z0-9_]+)\s*=\s*(.+?);')
++    out: Dict[str, int] = {}
++    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
++        for line in f:
++            m = assign_re.match(line)
++            if not m:
++                # stop early after header constants
++                if out and line.strip().startswith('MEMORY'):
++                    break
++                continue
++            name = m.group(1)
++            expr = m.group(2).strip()
++            try:
++                out[name] = _safe_eval_int(expr)
++            except Exception:
++                continue
++    return out
++
++
++def _parse_ftab_partitions(path: str) -> List[Tuple[int, int, int, int]]:
++    with open(path, 'rb') as f:
++        data = f.read()
++    if len(data) < 4 + PARTITION_ENTRY_STRUCT.size * PARTITION_ENTRY_COUNT:
++        raise _EvalError('ftab.bin too small: {}'.format(len(data)))
++    magic = struct.unpack_from('<I', data, 0)[0]
++    if magic != SEC_CONFIG_MAGIC:
++        raise _EvalError('Invalid ftab magic: 0x{:08X}'.format(magic))
++    off = 4
++    out: List[Tuple[int, int, int, int]] = []
++    for _ in range(PARTITION_ENTRY_COUNT):
++        base, size, xip_base, flags = PARTITION_ENTRY_STRUCT.unpack_from(data, off)
++        out.append((base, size, xip_base, flags))
++        off += PARTITION_ENTRY_STRUCT.size
++    return out
++
++
++def _write_generated_ptab_h(ptab_obj, env_name: str, core: str, out_path: str) -> None:
++    root = _repo_root()
++    sys.path.insert(0, os.path.join(root, 'tools', 'build'))
++    # Inject rtconfig for GenPartitionTableHeaderContentV3
++    rt = types.ModuleType('rtconfig')
++    rt.CORE = core
++    sys.modules['rtconfig'] = rt
++
++    import resource  # type: ignore
++
++    resource.InitIndentation()
++    env = {'name': env_name}
++    s = ''
++    s += resource.MakeLine('#ifndef __PTAB__H__')
++    s += resource.MakeLine('#define __PTAB__H__')
++    s += resource.MakeLine('')
++    s += resource.MakeLine('')
++    s += resource.GenPartitionTableHeaderContentV3(env, ptab_obj)
++    s += resource.MakeLine('')
++    s += resource.MakeLine('')
++    s += resource.MakeLine('')
++    s += resource.MakeLine('#endif')
++
++    with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
++        f.write(s)
++
++
++def main() -> int:
++    args = _parse_args()
++    root = _repo_root()
++
++    baseline_dir = args.baseline_build_dir
++    if not baseline_dir:
++        baseline_dir = os.path.join(root, 'example', 'misc', 'button', 'project', 'build_{}_hcpu'.format(args.board))
++    baseline_dir = os.path.abspath(baseline_dir)
++
++    baseline_main_ptab_h = os.path.join(baseline_dir, 'ptab.h')
++    baseline_main_link = os.path.join(baseline_dir, 'link_copy.lds')
++    baseline_ftab = os.path.join(baseline_dir, 'ftab', 'ftab.bin')
++    baseline_main_bin = os.path.join(baseline_dir, 'main.bin')
++
++    baseline_boot_dir = os.path.join(baseline_dir, 'bootloader')
++    baseline_boot_ptab_h = os.path.join(baseline_boot_dir, 'ptab.h')
++    baseline_boot_link = os.path.join(baseline_boot_dir, 'link_copy.lds')
++    baseline_boot_bin = os.path.join(baseline_boot_dir, 'bootloader.bin')
++
++    ptab_json = os.path.join(root, 'customer', 'boards', args.board, 'ptab.json')
++    if not os.path.exists(ptab_json):
++        print('ERROR: baseline ptab.json not found: {}'.format(ptab_json), file=sys.stderr)
++        return 2
++
++    # Prepare python imports from tools/build
++    sys.path.insert(0, os.path.join(root, 'tools', 'build'))
++    import ptab as ptab_module  # type: ignore
++    import gen_ftab  # type: ignore
++    import gen_link_lds  # type: ignore
++    import migrate_ptab_to_v3  # type: ignore
++
++    # Migrate to v3 YAML into tmp dir
++    tmp_dir = tempfile.mkdtemp(prefix='ptab_v3_reg_')
++    v3_yaml_path = os.path.join(tmp_dir, 'ptab.yaml')
++    v3_dict = migrate_ptab_to_v3.migrate_ptab_json_to_v3(migrate_ptab_to_v3._load_ptab_json(ptab_json), args.chip)
++    with open(v3_yaml_path, 'w', encoding='utf-8', newline='\n') as f:
++        yaml_text = yaml_dump(v3_dict)
++        f.write(yaml_text)
++
++    ptab_obj = ptab_module.load_ptab(v3_yaml_path, fatal=True)
++
++    # Generate v3 ptab.h (main + bootloader)
++    gen_main_ptab_h = os.path.join(tmp_dir, 'ptab_main.h')
++    gen_boot_ptab_h = os.path.join(tmp_dir, 'ptab_boot.h')
++    _write_generated_ptab_h(ptab_obj, 'main', 'HCPU', gen_main_ptab_h)
++    _write_generated_ptab_h(ptab_obj, 'bootloader', 'HCPU', gen_boot_ptab_h)
++
++    # Compare ptab.h (numeric)
++    baseline_main_macros = _collect_macro_values(baseline_main_ptab_h)
++    gen_main_macros = _collect_macro_values(gen_main_ptab_h)
++    baseline_boot_macros = _collect_macro_values(baseline_boot_ptab_h)
++    gen_boot_macros = _collect_macro_values(gen_boot_ptab_h)
++
++    key_macros = [
++        'FLASH_TABLE_START_ADDR', 'FLASH_TABLE_SIZE', 'FLASH_TABLE_OFFSET',
++        'HCPU_FLASH_CODE_START_ADDR', 'HCPU_FLASH_CODE_SIZE', 'HCPU_FLASH_CODE_OFFSET',
++        'DFU_FLASH_CODE_START_ADDR', 'DFU_FLASH_CODE_SIZE', 'DFU_FLASH_CODE_OFFSET',
++        'DFU_DOWNLOAD_REGION_START_ADDR', 'DFU_DOWNLOAD_REGION_SIZE', 'DFU_DOWNLOAD_REGION_OFFSET',
++        'FS_REGION_START_ADDR', 'FS_REGION_SIZE', 'FS_REGION_OFFSET',
++        'KVDB_DFU_REGION_START_ADDR', 'KVDB_DFU_REGION_SIZE', 'KVDB_DFU_REGION_OFFSET',
++        'KVDB_BLE_REGION_START_ADDR', 'KVDB_BLE_REGION_SIZE', 'KVDB_BLE_REGION_OFFSET',
++        'PSRAM_DATA_START_ADDR', 'PSRAM_DATA_SIZE', 'PSRAM_DATA_OFFSET',
++        'FLASH_BOOT_LOADER_START_ADDR', 'FLASH_BOOT_LOADER_SIZE', 'FLASH_BOOT_LOADER_OFFSET',
++        'BOOTLOADER_RAM_DATA_START_ADDR', 'BOOTLOADER_RAM_DATA_SIZE', 'BOOTLOADER_RAM_DATA_OFFSET',
++        'CODE_START_ADDR', 'CODE_SIZE',
++    ]
++
++    def _check_macros(label: str, base: Dict[str, int], new: Dict[str, int]) -> None:
++        for k in key_macros:
++            if k not in base:
++                continue
++            if k not in new:
++                raise _EvalError('{} missing macro: {}'.format(label, k))
++            if int(base[k]) != int(new[k]):
++                raise _EvalError('{} macro mismatch {}: 0x{:08X} != 0x{:08X}'.format(label, k, int(base[k]) & 0xFFFFFFFF, int(new[k]) & 0xFFFFFFFF))
++
++    _check_macros('main', baseline_main_macros, gen_main_macros)
++    _check_macros('bootloader', baseline_boot_macros, gen_boot_macros)
++
++    # Generate v3 link_copy.lds (main + bootloader)
++    hcpu_template = os.path.join(root, 'drivers', 'cmsis', 'sf32lb52x', 'Templates', 'gcc', 'hcpu', 'link.jinja2')
++    boot_template = os.path.join(root, 'example', 'boot_loader', 'project', 'butterflmicro', 'ram_v2', 'link.jinja2')
++
++    main_rtconfig_h = os.path.join(baseline_dir, 'rtconfig.h')
++    boot_rtconfig_h = os.path.join(baseline_boot_dir, 'rtconfig.h')
++    main_defines = gen_link_lds._parse_rtconfig_defines(main_rtconfig_h)
++    boot_defines = gen_link_lds._parse_rtconfig_defines(boot_rtconfig_h)
++
++    main_link_out = os.path.join(tmp_dir, 'link_main.lds')
++    boot_link_out = os.path.join(tmp_dir, 'link_boot.lds')
++
++    gen_link_lds.render_link_lds(
++        hcpu_template,
++        main_link_out,
++        gen_link_lds.compute_link_defines(ptab_obj, 'main', 'HCPU', main_defines),
++    )
++    gen_link_lds.render_link_lds(
++        boot_template,
++        boot_link_out,
++        gen_link_lds.compute_link_defines(ptab_obj, 'bootloader', 'HCPU', boot_defines),
++    )
++
++    lds_keys = [
++        '__ROM_BASE', '__ROM_SIZE', '__RAM_BASE', '__RAM_SIZE',
++        '__ROM_EX_BASE', '__ROM_EX_SIZE', '__PSRAM_BASE', '__PSRAM_SIZE',
++        '__ROM2_BASE', '__ROM2_SIZE', '__ROM3_BASE', '__ROM3_SIZE',
++    ]
++    baseline_main_lds = _parse_lds_assignments(baseline_main_link)
++    gen_main_lds = _parse_lds_assignments(main_link_out)
++    for k in lds_keys:
++        if k not in baseline_main_lds or k not in gen_main_lds:
++            continue
++        if int(baseline_main_lds[k]) != int(gen_main_lds[k]):
++            raise _EvalError('main link mismatch {}: 0x{:08X} != 0x{:08X}'.format(k, int(baseline_main_lds[k]) & 0xFFFFFFFF, int(gen_main_lds[k]) & 0xFFFFFFFF))
++
++    baseline_boot_lds = _parse_lds_assignments(baseline_boot_link)
++    gen_boot_lds = _parse_lds_assignments(boot_link_out)
++    for k in lds_keys:
++        if k not in baseline_boot_lds or k not in gen_boot_lds:
++            continue
++        if int(baseline_boot_lds[k]) != int(gen_boot_lds[k]):
++            raise _EvalError('bootloader link mismatch {}: 0x{:08X} != 0x{:08X}'.format(k, int(baseline_boot_lds[k]) & 0xFFFFFFFF, int(gen_boot_lds[k]) & 0xFFFFFFFF))
++
++    # Generate v3 ftab.bin (main)
++    boot_size = os.path.getsize(baseline_boot_bin) if os.path.exists(baseline_boot_bin) else 0x10000
++    main_size = os.path.getsize(baseline_main_bin) if os.path.exists(baseline_main_bin) else 0x200000
++    chip_config = ptab_obj.get_chip_config()
++    ftab_data = gen_ftab.generate_ftab_binary(ptab_obj, chip_config, boot_size, main_size)
++    gen_ftab_path = os.path.join(tmp_dir, 'ftab.bin')
++    with open(gen_ftab_path, 'wb') as f:
++        f.write(ftab_data)
++
++    base_ftab_parts = _parse_ftab_partitions(baseline_ftab)
++    gen_ftab_parts = _parse_ftab_partitions(gen_ftab_path)
++
++    # Compare key partition entries (base/size/xip_base/flags)
++    key_indices = [0, 1, 3, 4, 7, 8]
++    for idx in key_indices:
++        if base_ftab_parts[idx] != gen_ftab_parts[idx]:
++            raise _EvalError('ftab entry {} mismatch: {} != {}'.format(idx, base_ftab_parts[idx], gen_ftab_parts[idx]))
++
++    if args.keep_tmp:
++        print('OK (tmp dir kept): {}'.format(tmp_dir))
++    else:
++        # Best-effort cleanup
++        try:
++            import shutil
++            shutil.rmtree(tmp_dir)
++        except Exception:
++            pass
++        print('OK')
++    return 0
++
++
++def yaml_dump(obj: Any) -> str:
++    # Local import to avoid hard dependency when running under minimal envs.
++    import yaml  # type: ignore
++    from collections import OrderedDict
++
++    class _OrderedDumper(yaml.SafeDumper):
++        pass
++
++    def _repr_ordered(dumper: yaml.Dumper, data: Dict[str, Any]):  # type: ignore
++        return dumper.represent_mapping('tag:yaml.org,2002:map', data.items())
++
++    _OrderedDumper.add_representer(dict, _repr_ordered)
++    _OrderedDumper.add_representer(OrderedDict, _repr_ordered)
++    return yaml.dump(obj, Dumper=_OrderedDumper, default_flow_style=False, allow_unicode=True, sort_keys=False, indent=2)
++
++
++if __name__ == '__main__':
++    raise SystemExit(main())
+diff --git a/tools/build/resource.py b/tools/build/resource.py
+index 54b7a0bd5172257c2bf82ced25eec7592cb106bf..6a0929212c68c49c26cd2e6f4284d4d90524c349 100644
+--- a/tools/build/resource.py
++++ b/tools/build/resource.py
+@@ -737,35 +737,125 @@ def GenPartitionTableHeaderContentV1(env, mems):
+ 
+ 
+ def GenPartitionTableHeaderContentV3(env, ptab_obj):
+-    """Generate ptab.h content for ptab v3
+-
+-    Args:
+-        env: Build environment
+-        ptab_obj: PtabV3 object
+-
+-    Address selection:
+-    - Default: use XIP address (cbus_addr) for compatibility with v1/v2
+-    - exec_region: for partitions with exec_region, the exec address uses cbus_addr
+-    - accelerate: use accelerate partition's xip address as CODE_START_ADDR
++    """Generate ptab.h content for ptab v3 (acc + aliases).
++
++    This generator keeps v1/v2 compatibility by generating:
++    - Name macros: <NAME>_START_ADDR/_SIZE/_OFFSET
++    - Alias macros: <ALIAS>_START_ADDR/_SIZE/_OFFSET
++    - FS_REGION_* for filesystem-like partitions
++    - FLASH_BOOT_LOADER_* from bootloader.acc (execution address)
++    - CODE_START_ADDR/CODE_SIZE for the current env image (best-effort)
+     """
++
+     s = ''
+     chip_config = ptab_obj.get_chip_config()
+     partitions = ptab_obj.partitions
+ 
+-    # Find accelerate partition for CODE_START_ADDR
+-    accelerate_partition = None
+-    for p in partitions:
+-        if p.get('type') == 'app' and p.get('subtype') == 'accelerate':
+-            accelerate_partition = p
+-            break
++    def _mpi_name_from_region(region):
++        if not region:
++            return None
++        if region.startswith('mpi'):
++            return region
++        if region.startswith('psram'):
++            if region == 'psram':
++                return 'mpi1'
++            suffix = region.replace('psram', '')
++            if suffix.isdigit():
++                return 'mpi{}'.format(suffix)
++        return None
++
++    def _get_region_mem_type(region):
++        if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
++            return 'ram'
++        mpi_name = _mpi_name_from_region(region)
++        if mpi_name:
++            info = chip_config.get('memory_info', {}).get(mpi_name, {})
++            mtype = (info.get('type') or '').lower()
++            return mtype or 'nor'
++        return ''
++
++    def _select_start_addr(region, sbus_addr, cbus_addr, subtype):
++        # For RAM-like partitions, always use base address
++        if subtype == 'ram':
++            return sbus_addr
++        mem_type = _get_region_mem_type(region)
++        if mem_type == 'nor':
++            return cbus_addr
++        return sbus_addr
++
++    def _select_exec_addr(region, sbus_addr, cbus_addr):
++        # Execution address selection:
++        # - RAM/NAND/PSRAM: base
++        # - NOR: XIP
++        mem_type = _get_region_mem_type(region)
++        if mem_type in ('ram', 'nand', 'psram'):
++            return sbus_addr
++        return cbus_addr
++
++    def _define_u32(name, value):
++        out = ''
++        out += MakeLine('#undef  {}'.format(name))
++        out += MakeLine('#define {:<50} (0x{:08X})'.format(name, value & 0xFFFFFFFF))
++        return out
++
++    def _define_ref(name, ref):
++        out = ''
++        out += MakeLine('#undef  {}'.format(name))
++        out += MakeLine('#define {:<50} ({})'.format(name, ref))
++        return out
++
++    def _get_flash_boot_loader_size_default():
++        # FLASH_BOOT_LOADER_* macros are used by bootloader link scripts as the
++        # execution region in RAM. For historical compatibility, its SIZE is
++        # derived from chip mem_map.h default (not necessarily the flash
++        # storage partition size).
++        try:
++            sifli_sdk = os.getenv('SIFLI_SDK')
++            if not sifli_sdk:
++                # Fallback for offline tools (e.g. regression script)
++                sifli_sdk = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
++            if not sifli_sdk:
++                return None
++            chip_dir = (ptab_obj.chip_series or '').lower()
++            if chip_dir and not chip_dir.endswith('x'):
++                chip_dir = chip_dir + 'x'
++            if not chip_dir:
++                return None
++            import gen_link_lds
++            mem_ints = gen_link_lds._load_mem_map_ints(sifli_sdk, chip_dir)
++            v = mem_ints.get('FLASH_BOOT_LOADER_SIZE')
++            if v is None:
++                return None
++            v = int(v)
++            return v if v > 0 else None
++        except Exception:
++            return None
++
++    # Quick lookup maps
++    by_name = {}
++    factory_by_core = {}
++    dfu_by_core = {}
++    bootloader_partition = None
+ 
+-    # Group partitions by region
++    for p in partitions:
++        pname = p.get('name', '')
++        if pname:
++            by_name[pname.lower()] = p
++        ptype = p.get('type', '')
++        subtype = p.get('subtype', '')
++        core = (p.get('core') or 'HCPU').upper()
++        if ptype == 'bootloader':
++            bootloader_partition = p
++        if ptype == 'app' and subtype == 'factory' and core not in factory_by_core:
++            factory_by_core[core] = p
++        if ptype == 'app' and subtype == 'dfu' and core not in dfu_by_core:
++            dfu_by_core[core] = p
++
++    # Group partitions by region for readability
+     region_groups = {}
+     for partition in partitions:
+         region = partition.get('region', '')
+-        if region not in region_groups:
+-            region_groups[region] = []
+-        region_groups[region].append(partition)
++        region_groups.setdefault(region, []).append(partition)
+ 
+     for region, parts in region_groups.items():
+         s += MakeLine('')
+@@ -781,118 +871,112 @@ def GenPartitionTableHeaderContentV3(env, ptab_obj):
+             size = ptab.parse_size(partition.get('size', 0))
+             ptype = partition.get('type', '')
+             subtype = partition.get('subtype', '')
++            core = partition.get('core')
+ 
+-            # Get addresses
+-            sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config)
+-
+-            # Select address based on memory type:
+-            # - PSRAM/RAM/NAND: use base address (sbus_addr) - direct memory access
+-            # - NOR Flash: use XIP address (cbus_addr) - execute in place
+-            memory_info = chip_config.get('memory_info', {}).get(region, {})
+-            mem_type = memory_info.get('type', '').lower()
+-            
+-            # PSRAM, RAM, and NAND types use base address
+-            # Only NOR flash uses XIP address
+-            if mem_type in ('psram', 'ram', 'nand') or subtype == 'ram':
+-                use_addr = sbus_addr
+-            else:
+-                # Default to XIP address for NOR Flash
+-                use_addr = cbus_addr
++            sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config, core=core)
++            start_addr = _select_start_addr(region, sbus_addr, cbus_addr, subtype)
+ 
+-            # Generate macros based on name
+             name_upper = name.upper()
+-            start_addr_name = '{}_START_ADDR'.format(name_upper)
+-            size_name = '{}_SIZE'.format(name_upper)
+-            offset_name = '{}_OFFSET'.format(name_upper)
+-
+-            s += MakeLine('#undef  {}'.format(start_addr_name))
+-            s += MakeLine('#define {:<50} (0x{:08X})'.format(start_addr_name, use_addr))
+-            s += MakeLine('#undef  {}'.format(size_name))
+-            s += MakeLine('#define {:<50} (0x{:08X})'.format(size_name, size))
+-            s += MakeLine('#undef  {}'.format(offset_name))
+-            s += MakeLine('#define {:<50} (0x{:08X})'.format(offset_name, offset))
+-
+-            # Handle exec_region - generate code execution address macros
+-            exec_region = partition.get('exec_region')
+-            if exec_region:
+-                exec_offset = ptab.parse_size(partition.get('exec_offset', 0))
+-                exec_sbus_addr, exec_cbus_addr = ptab.resolve_region_address(exec_region, exec_offset, chip_config)
+-
+-                # Bootloader uses FLASH_BOOT_LOADER_* naming for compatibility
+-                if ptype == 'bootloader':
+-                    code_start_name = 'FLASH_BOOT_LOADER_START_ADDR'
+-                    code_size_name = 'FLASH_BOOT_LOADER_SIZE'
+-                    code_offset_name = 'FLASH_BOOT_LOADER_OFFSET'
+-                else:
+-                    code_start_name = 'APP_{}_CODE_START_ADDR'.format(name_upper)
+-                    code_size_name = 'APP_{}_CODE_SIZE'.format(name_upper)
+-                    code_offset_name = 'APP_{}_CODE_OFFSET'.format(name_upper)
+-
+-                # Determine exec address based on memory type
+-                exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
+-                exec_mem_type = exec_memory_info.get('type', '').lower()
+-                
+-                # PSRAM uses XIP for code execution (like NOR flash)
+-                # Only RAM and NAND use base address for execution
+-                if exec_mem_type in ('ram', 'nand'):
+-                    exec_use_addr = exec_sbus_addr
+-                else:
+-                    # PSRAM, NOR, and other types use XIP for execution
+-                    exec_use_addr = exec_cbus_addr
+-                
+-                s += MakeLine('#undef  {}'.format(code_start_name))
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_start_name, exec_use_addr))
+-                s += MakeLine('#undef  {}'.format(code_size_name))
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_size_name, size))
+-                s += MakeLine('#undef  {}'.format(code_offset_name))
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_offset_name, exec_offset))
+-
+-            # Handle type=app + subtype=accelerate - as CODE_START_ADDR
+-            # accelerate partition address depends on memory type
+-            if ptype == 'app' and subtype == 'accelerate':
+-                # Use base address for NAND, XIP for NOR
+-                if mem_type == 'nand':
+-                    accelerate_use_addr = sbus_addr
+-                else:
+-                    accelerate_use_addr = cbus_addr
+-                    
+-                s += MakeLine('#undef  CODE_START_ADDR')
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_START_ADDR', accelerate_use_addr))
+-                s += MakeLine('#undef  CODE_SIZE')
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_SIZE', size))
+-
+-            # Handle XIP execution for main/factory partition (no exec_region, no accelerate)
+-            # In this case, main partition's XIP address is CODE_START_ADDR
+-            is_main_app = (ptype == 'app' and subtype == 'factory') or name in ('main', 'hcpu_flash_code')
+-            if is_main_app and not exec_region and not accelerate_partition:
+-                s += MakeLine('#define {:<50} ({})'.format('CODE_START_ADDR', start_addr_name))
+-                s += MakeLine('#define {:<50} ({})'.format('CODE_SIZE', size_name))
+-
+-            # Handle type=data + filesystem subtypes - generate FS_REGION_* macros for compatibility
++            s += _define_u32('{}_START_ADDR'.format(name_upper), start_addr)
++            s += _define_u32('{}_SIZE'.format(name_upper), size)
++            s += _define_u32('{}_OFFSET'.format(name_upper), offset)
++
++            # Alias macros
++            alias_set = []
++            for a in (partition.get('aliases', []) or []):
++                a = str(a).strip()
++                if not a:
++                    continue
++                a = a.upper()
++                if a not in alias_set:
++                    alias_set.append(a)
++            for a in alias_set:
++                s += _define_u32('{}_START_ADDR'.format(a), start_addr)
++                s += _define_u32('{}_SIZE'.format(a), size)
++                s += _define_u32('{}_OFFSET'.format(a), offset)
++
++            # FS_REGION_* macros (compat)
+             fs_subtypes = ('littlefs', 'fat', 'fatfs', 'flashdb', 'filesystem')
+             if ptype == 'data' and subtype in fs_subtypes:
+-                s += MakeLine('#undef  FS_REGION_START_ADDR')
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_START_ADDR', cbus_addr))
+-                s += MakeLine('#undef  FS_REGION_SIZE')
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_SIZE', size))
+-                s += MakeLine('#undef  FS_REGION_OFFSET')
+-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_OFFSET', offset))
+-
+-            # Handle attrs custom macros
++                s += _define_u32('FS_REGION_START_ADDR', start_addr)
++                s += _define_u32('FS_REGION_SIZE', size)
++                s += _define_u32('FS_REGION_OFFSET', offset)
++
++            # attrs custom macros
+             attrs = partition.get('attrs', {})
+             if isinstance(attrs, dict):
+                 for key, value in attrs.items():
+                     if isinstance(value, int):
+-                        s += MakeLine('#undef  {}'.format(key))
+-                        s += MakeLine('#define {:<50} (0x{:08X})'.format(key, value))
+-
+-            # Handle rom_index deprecation warning
+-            rom_index = partition.get('rom_index')
+-            if rom_index is not None:
+-                logging.warning(
+-                    "Partition '{}' uses deprecated 'rom_index'. "
+-                    "Please migrate to name-based section naming.".format(name)
+-                )
++                        s += _define_u32(str(key), value)
++
++    # FLASH_BOOT_LOADER_* macros (execution address, from acc)
++    if bootloader_partition and isinstance(bootloader_partition.get('acc'), dict):
++        acc = bootloader_partition['acc']
++        acc_region = str(acc.get('region', '')).strip()
++        acc_offset = ptab.parse_size(acc.get('offset', 0))
++        bl_size = _get_flash_boot_loader_size_default()
++        if bl_size is None:
++            bl_size = ptab.parse_size(bootloader_partition.get('size', 0))
++        else:
++            # Keep it >= flash storage size (best-effort)
++            storage_size = ptab.parse_size(bootloader_partition.get('size', 0))
++            if storage_size > bl_size:
++                bl_size = storage_size
++        bl_core = bootloader_partition.get('core')
++        acc_sbus, acc_cbus = ptab.resolve_region_address(acc_region, acc_offset, chip_config, core=bl_core)
++        bl_exec_addr = _select_exec_addr(acc_region, acc_sbus, acc_cbus)
++
++        s += MakeLine('')
++        s += MakeLine('')
++        s += MakeLine('/* bootloader exec addr */')
++        s += _define_u32('FLASH_BOOT_LOADER_START_ADDR', bl_exec_addr)
++        s += _define_u32('FLASH_BOOT_LOADER_SIZE', bl_size)
++        s += _define_u32('FLASH_BOOT_LOADER_OFFSET', acc_offset)
++
++    # CODE_START_ADDR/CODE_SIZE for current image (best-effort)
++    env_name = (env.get('name') or '').strip().lower()
++    try:
++        import rtconfig
++        build_core = getattr(rtconfig, 'CORE', None)
++    except Exception:
++        build_core = None
++    build_core = (build_core or 'HCPU').upper()
++
++    code_partition = None
++    if env_name == 'bootloader':
++        code_partition = bootloader_partition
++    elif env_name == 'dfu':
++        code_partition = dfu_by_core.get(build_core)
++    elif env_name == 'main':
++        code_partition = factory_by_core.get(build_core)
++    elif env_name:
++        code_partition = by_name.get(env_name)
++
++    if code_partition:
++        s += MakeLine('')
++        s += MakeLine('')
++        s += MakeLine('/* code start */')
++
++        if code_partition.get('type') == 'bootloader' and isinstance(code_partition.get('acc'), dict):
++            s += _define_ref('CODE_START_ADDR', 'FLASH_BOOT_LOADER_START_ADDR')
++            s += _define_ref('CODE_SIZE', 'FLASH_BOOT_LOADER_SIZE')
++        else:
++            size = ptab.parse_size(code_partition.get('size', 0))
++            acc = code_partition.get('acc')
++            core = code_partition.get('core')
++            if isinstance(acc, dict):
++                acc_region = str(acc.get('region', '')).strip()
++                acc_offset = ptab.parse_size(acc.get('offset', 0))
++                acc_sbus, acc_cbus = ptab.resolve_region_address(acc_region, acc_offset, chip_config, core=core)
++                exec_addr = _select_exec_addr(acc_region, acc_sbus, acc_cbus)
++            else:
++                region = code_partition.get('region', '')
++                offset = ptab.parse_size(code_partition.get('offset', 0))
++                sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config, core=core)
++                exec_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
++
++            s += _define_u32('CODE_START_ADDR', exec_addr)
++            s += _define_u32('CODE_SIZE', size)
+ 
+     return s
+ 
+diff --git a/tools/build/validate_ptab_v3.py b/tools/build/validate_ptab_v3.py
+index 1b37b6f18ed54967b62a8ffc2db87b0e85466745..435dedca8e81ae4ad50dafc99cdf7b79dac7edb1 100644
+--- a/tools/build/validate_ptab_v3.py
++++ b/tools/build/validate_ptab_v3.py
+@@ -15,7 +15,7 @@ import argparse
+ import re
+ import sys
+ from pathlib import Path
+-from typing import List, Tuple
++from typing import Dict, List, Optional, Tuple
+ 
+ # Add tools/build to path
+ _TOOLS_BUILD_PATH = Path(__file__).parent
+@@ -61,7 +61,7 @@ def validate_name(name: str, partition_idx: int) -> List[ValidationError]:
+ def validate_type(ptype: str, partition_name: str) -> List[ValidationError]:
+     """Validate partition type"""
+     errors = []
+-    valid_types = {'ptab', 'bootloader', 'app', 'data', 'code', 'ftab'}
++    valid_types = {'ftab', 'bootloader', 'app', 'data'}
+ 
+     if not ptype:
+         errors.append(ValidationError(
+@@ -91,9 +91,9 @@ def validate_region(region: str, partition_name: str, chip_config: dict) -> List
+     ram_config = chip_config.get('ram', {})
+ 
+     known_regions = set(mpi_config.keys())
+-    known_regions.update(['hpsys_ram', 'lpsys_ram', 'psram1', 'psram'])
++    known_regions.update(['hpsys_ram', 'lpsys_ram', 'psram', 'psram1', 'psram2'])
+ 
+-    if region not in known_regions and not region.startswith('mpi'):
++    if region not in known_regions and not region.startswith('mpi') and not region.startswith('psram'):
+         errors.append(ValidationError(
+             f"Partition '{partition_name}': unknown region '{region}'",
+             severity="warning"
+@@ -120,22 +120,37 @@ def validate_size(value, field_name: str, partition_name: str) -> List[Validatio
+     return errors
+ 
+ 
+-def validate_exec_region_constraint(partitions: List[dict]) -> List[ValidationError]:
+-    """Validate: if exec_region exists, must have accelerate partition"""
++def validate_acc(acc, partition_name: str, chip_config: dict, core: Optional[str]) -> List[ValidationError]:
++    """Validate acc structure and address parsing."""
+     errors = []
+ 
+-    has_exec_region = False
+-    has_accelerate = False
++    if acc is None:
++        return errors
+ 
+-    for p in partitions:
+-        if p.get('exec_region'):
+-            has_exec_region = True
+-        if p.get('type') == 'app' and p.get('subtype') == 'accelerate':
+-            has_accelerate = True
++    if not isinstance(acc, dict):
++        errors.append(ValidationError(
++            f"Partition '{partition_name}': 'acc' must be a dict with keys {{region, offset}}"
++        ))
++        return errors
++
++    acc_region = acc.get('region', '')
++    acc_offset = acc.get('offset', 0)
+ 
+-    if has_exec_region and not has_accelerate:
++    if not acc_region:
++        errors.append(ValidationError(
++            f"Partition '{partition_name}': acc.region is required when acc is present"
++        ))
++        return errors
++
++    errors.extend(validate_region(str(acc_region), f"{partition_name}.acc", chip_config))
++    errors.extend(validate_size(acc_offset, 'acc.offset', partition_name))
++
++    # Try resolving address (this may still succeed for unknown region but is useful for early errors)
++    try:
++        ptab_module.resolve_region_address(str(acc_region), ptab_module.parse_size(acc_offset), chip_config, core=core)
++    except Exception as e:
+         errors.append(ValidationError(
+-            "exec_region is used but no partition with type='app' + subtype='accelerate' found"
++            f"Partition '{partition_name}': failed to resolve acc address: {e}"
+         ))
+ 
+     return errors
+@@ -160,6 +175,79 @@ def validate_bootloader_unique(partitions: List[dict]) -> List[ValidationError]:
+     return errors
+ 
+ 
++def validate_ftab_unique(partitions: List[dict]) -> List[ValidationError]:
++    """Validate: exactly one ftab partition"""
++    errors = []
++    ftabs = [p for p in partitions if p.get('type') == 'ftab']
++
++    if len(ftabs) == 0:
++        errors.append(ValidationError("No partition with type='ftab' found"))
++    elif len(ftabs) > 1:
++        names = [p.get('name', '?') for p in ftabs]
++        errors.append(ValidationError(f"Multiple ftab partitions found: {', '.join(names)}"))
++
++    return errors
++
++
++def validate_factory_unique_by_core(partitions: List[dict]) -> List[ValidationError]:
++    """Validate: at most one factory app per core."""
++    errors = []
++    seen: Dict[str, List[str]] = {}
++
++    for p in partitions:
++        if p.get('type') != 'app' or p.get('subtype') != 'factory':
++            continue
++        core = (p.get('core') or 'HCPU').upper()
++        seen.setdefault(core, []).append(p.get('name', '?'))
++
++    for core, names in seen.items():
++        if len(names) > 1:
++            errors.append(ValidationError(
++                f"Multiple factory app partitions found for core {core}: {', '.join(names)}"
++            ))
++
++    return errors
++
++
++def validate_name_unique(partitions: List[dict]) -> List[ValidationError]:
++    errors = []
++    seen: Dict[str, int] = {}
++    for idx, p in enumerate(partitions):
++        name = p.get('name', '')
++        if not name:
++            continue
++        if name in seen:
++            errors.append(ValidationError(
++                f"Duplicate partition name '{name}' found at indices {seen[name]} and {idx}"
++            ))
++        else:
++            seen[name] = idx
++    return errors
++
++
++def validate_aliases_conflict(partitions: List[dict]) -> List[ValidationError]:
++    errors = []
++    owner: Dict[str, str] = {}
++
++    for p in partitions:
++        pname = p.get('name', '?')
++        aliases = p.get('aliases', []) or []
++        if not isinstance(aliases, list):
++            continue
++        for a in aliases:
++            a_norm = str(a).strip().upper()
++            if not a_norm:
++                continue
++            if a_norm in owner and owner[a_norm] != pname:
++                errors.append(ValidationError(
++                    f"Alias macro base '{a_norm}' is used by multiple partitions: {owner[a_norm]} and {pname}"
++                ))
++            else:
++                owner[a_norm] = pname
++
++    return errors
++
++
+ def validate_no_overlap(partitions: List[dict], chip_config: dict) -> List[ValidationError]:
+     """Validate partitions don't overlap within same region"""
+     errors = []
+@@ -222,9 +310,19 @@ def validate_ptab_v3(ptab_obj) -> List[ValidationError]:
+         errors.append(ValidationError("Not a v3 format ptab file"))
+         return errors
+ 
++    # Header checks
++    if not str(getattr(ptab_obj, 'version', '') or '') == '3':
++        errors.append(ValidationError("ptab.yaml: version must be 3"))
++    chip = getattr(ptab_obj, 'chip', '') or ''
++    if not str(chip).strip():
++        errors.append(ValidationError("ptab.yaml: 'chip' is required"))
++
+     chip_config = ptab_obj.get_chip_config()
+     partitions = ptab_obj.partitions
+ 
++    errors.extend(validate_name_unique(partitions))
++    errors.extend(validate_aliases_conflict(partitions))
++
+     # Per-partition validations
+     for idx, p in enumerate(partitions):
+         errors.extend(validate_name(p.get('name', ''), idx))
+@@ -232,10 +330,19 @@ def validate_ptab_v3(ptab_obj) -> List[ValidationError]:
+         errors.extend(validate_region(p.get('region', ''), p.get('name', '?'), chip_config))
+         errors.extend(validate_size(p.get('offset', 0), 'offset', p.get('name', '?')))
+         errors.extend(validate_size(p.get('size', 0), 'size', p.get('name', '?')))
++        errors.extend(validate_acc(p.get('acc'), p.get('name', '?'), chip_config, p.get('core')))
+ 
+     # Global validations
+-    errors.extend(validate_exec_region_constraint(partitions))
+     errors.extend(validate_bootloader_unique(partitions))
++    errors.extend(validate_ftab_unique(partitions))
++    errors.extend(validate_factory_unique_by_core(partitions))
++
++    # Bootloader must have acc (execution address)
++    bootloaders = [p for p in partitions if p.get('type') == 'bootloader']
++    if len(bootloaders) == 1:
++        if not isinstance(bootloaders[0].get('acc'), dict):
++            errors.append(ValidationError("bootloader partition must provide 'acc: {region, offset}'"))
++
+     errors.extend(validate_no_overlap(partitions, chip_config))
+     errors.extend(validate_rom_index_deprecation(partitions))
+ 
+diff --git a/tools/requirements/requirements.core.txt b/tools/requirements/requirements.core.txt
+index 4587222f526eb0cb3e338823e8b04a88bd5fbf0f..641655bd0b05d2b0a1e8ce6383612bbcca826a60 100644
+--- a/tools/requirements/requirements.core.txt
++++ b/tools/requirements/requirements.core.txt
+@@ -28,4 +28,5 @@ conan
+ semantic_version
+ cryptography
+ json5
+-crccheck
+\ No newline at end of file
++crccheck
++Jinja2

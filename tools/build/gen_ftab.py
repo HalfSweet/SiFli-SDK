@@ -104,19 +104,77 @@ def parse_args() -> argparse.Namespace:
 
 def build_partition_table_entries(
     partitions: List[dict],
-    chip_config: dict
+    chip_config: dict,
+    chip: Optional[str] = None,
 ) -> List[Tuple[int, int, int, int]]:
     """Build partition table entries from ptab partitions.
 
-    对于 accelerate 分区：
-    - base: 存储地址（flash）
-    - xip_base: 执行地址（psram 的 xip 地址）
-    - 下载时使用 base 地址，执行时使用 xip_base 地址
+    v3 address rules:
+    - entry.base uses the "download/storage" view:
+      - NOR: XIP (cbus)
+      - NAND/RAM/PSRAM: base (sbus)
+    - entry.xip_base uses the "execution" view:
+      - default: XIP (cbus)
+      - RAM/NAND: base (sbus)
+    - For app/bootloader partitions with `acc`, xip_base comes from acc.{region,offset}.
 
     Returns:
         List of (base, size, xip_base, flags) tuples
     """
     entries = [(0, 0, 0, 0)] * PARTITION_ENTRY_COUNT
+
+    def _mpi_name_from_region(region: str) -> Optional[str]:
+        if not region:
+            return None
+        if region.startswith('mpi'):
+            return region
+        if region.startswith('psram'):
+            if region == 'psram':
+                return 'mpi1'
+            suffix = region.replace('psram', '')
+            if suffix.isdigit():
+                return f'mpi{suffix}'
+        return None
+
+    def _get_region_mem_type(region: str) -> str:
+        if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
+            return 'ram'
+        mpi_name = _mpi_name_from_region(region)
+        if mpi_name:
+            info = chip_config.get('memory_info', {}).get(mpi_name, {})
+            mtype = (info.get('type') or '').lower()
+            return mtype or 'nor'
+        return ''
+
+    def _select_download_addr(region: str, sbus_addr: int, cbus_addr: int) -> int:
+        return cbus_addr if _get_region_mem_type(region) == 'nor' else sbus_addr
+
+    def _select_exec_addr(region: str, sbus_addr: int, cbus_addr: int) -> int:
+        mem_type = _get_region_mem_type(region)
+        return sbus_addr if mem_type in ('ram', 'nand', 'psram') else cbus_addr
+
+    def _get_flash_boot_loader_size_default() -> Optional[int]:
+        try:
+            sifli_sdk = os.getenv('SIFLI_SDK')
+            if not sifli_sdk:
+                # Fallback for offline tools
+                sifli_sdk = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            if not sifli_sdk:
+                return None
+            chip_u = (chip or '').upper()
+            if chip_u.startswith('SF32LB52'):
+                cmsis_dir = 'sf32lb52x'
+            else:
+                return None
+            import gen_link_lds
+            mem_ints = gen_link_lds._load_mem_map_ints(sifli_sdk, cmsis_dir)
+            v = mem_ints.get('FLASH_BOOT_LOADER_SIZE')
+            if v is None:
+                return None
+            v = int(v)
+            return v if v > 0 else None
+        except Exception:
+            return None
 
     # Find key partitions
     ftab_partition = None
@@ -124,7 +182,6 @@ def build_partition_table_entries(
     bootloader_partition = None
     main_partition = None
     dfu_partition = None
-    accelerate_partition = None
 
     for p in partitions:
         ptype = p.get('type', '')
@@ -141,8 +198,6 @@ def build_partition_table_entries(
             main_partition = p
         elif ptype == 'app' and subtype == 'dfu':
             dfu_partition = p
-        elif ptype == 'app' and subtype == 'accelerate':
-            accelerate_partition = p
 
     # Fill ftab entry
     if ftab_partition:
@@ -150,11 +205,7 @@ def build_partition_table_entries(
         region = ftab_partition.get('region', '')
         offset = ptab_module.parse_size(ftab_partition.get('offset', 0))
         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-        
-        # Select base address based on memory type
-        memory_info = chip_config.get('memory_info', {}).get(region, {})
-        mem_type = memory_info.get('type', '').lower()
-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
         
         entries[PartitionIndex.FLASH_PARTITION_TABLE] = (base_addr, size, 0, 0)
 
@@ -164,80 +215,81 @@ def build_partition_table_entries(
         region = calibration_partition.get('region', '')
         offset = ptab_module.parse_size(calibration_partition.get('offset', 0))
         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-        
-        # Select base address based on memory type
-        memory_info = chip_config.get('memory_info', {}).get(region, {})
-        mem_type = memory_info.get('type', '').lower()
-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
         
         entries[PartitionIndex.CALIBRATION_TABLE] = (base_addr, size, 0, 0)
 
     # Fill bootloader entry
     if bootloader_partition:
-        size = ptab_module.parse_size(bootloader_partition.get('size', 0))
+        storage_size = ptab_module.parse_size(bootloader_partition.get('size', 0))
+        size = _get_flash_boot_loader_size_default()
+        if size is None:
+            size = storage_size
+        elif storage_size > size:
+            size = storage_size
         region = bootloader_partition.get('region', '')
         offset = ptab_module.parse_size(bootloader_partition.get('offset', 0))
         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-        
-        # Select base address based on memory type
-        memory_info = chip_config.get('memory_info', {}).get(region, {})
-        mem_type = memory_info.get('type', '').lower()
-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
 
-        exec_region = bootloader_partition.get('exec_region', region)
-        exec_offset = ptab_module.parse_size(bootloader_partition.get('exec_offset', offset))
+        acc = bootloader_partition.get('acc')
+        if not isinstance(acc, dict):
+            raise ValueError("bootloader partition must provide acc for ftab generation")
+
+        exec_region = str(acc.get('region', '')).strip()
+        exec_offset = ptab_module.parse_size(acc.get('offset', 0))
         exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
-        
-        # XIP address: RAM/NAND use base, PSRAM/NOR use XIP
-        exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
-        exec_mem_type = exec_memory_info.get('type', '').lower()
-        xip_addr = exec_sbus_addr if exec_mem_type in ('ram', 'nand') else exec_cbus_addr
+        xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
 
         entries[PartitionIndex.BOOTLOADER] = (base_addr, size, xip_addr, 0)
         entries[PartitionIndex.BOOTLOADER_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
 
     # Fill main entry
-    # For main partition, if accelerate partition exists, use accelerate's xip address
     if main_partition:
         region = main_partition.get('region', '')
         offset = ptab_module.parse_size(main_partition.get('offset', 0))
         size = ptab_module.parse_size(main_partition.get('size', 0))
         sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-        
-        # Select base address based on memory type
-        memory_info = chip_config.get('memory_info', {}).get(region, {})
-        mem_type = memory_info.get('type', '').lower()
-        base_addr = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
 
-        # Check if accelerate partition is used for execution address
-        if accelerate_partition:
-            # accelerate partition: stored in flash, executed in psram
-            # ftab's xip_base should be accelerate partition's xip address
-            acc_region = accelerate_partition.get('region', '')
-            acc_offset = ptab_module.parse_size(accelerate_partition.get('offset', 0))
-            acc_sbus_addr, acc_cbus_addr = ptab_module.resolve_region_address(acc_region, acc_offset, chip_config)
-            
-            # XIP address for execution
-            acc_memory_info = chip_config.get('memory_info', {}).get(acc_region, {})
-            acc_mem_type = acc_memory_info.get('type', '').lower()
-            xip_addr = acc_sbus_addr if acc_mem_type in ('ram', 'nand') else acc_cbus_addr
-        elif main_partition.get('exec_region'):
-            exec_region = main_partition.get('exec_region', region)
-            exec_offset = ptab_module.parse_size(main_partition.get('exec_offset', offset))
+        acc = main_partition.get('acc')
+        if isinstance(acc, dict):
+            exec_region = str(acc.get('region', '')).strip()
+            exec_offset = ptab_module.parse_size(acc.get('offset', 0))
             exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
-            
-            # XIP address: RAM/NAND use base, PSRAM/NOR use XIP
-            exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
-            exec_mem_type = exec_memory_info.get('type', '').lower()
-            xip_addr = exec_sbus_addr if exec_mem_type in ('ram', 'nand') else exec_cbus_addr
+            xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
         else:
-            # Default XIP execution
-            xip_sbus_addr, xip_cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-            # Use base for NAND/RAM, XIP for PSRAM/NOR
-            xip_addr = xip_sbus_addr if mem_type in ('ram', 'nand') else xip_cbus_addr
+            # No acc: allow XIP for NOR/PSRAM; NAND must provide acc
+            mem_type = _get_region_mem_type(region)
+            if mem_type == 'nand':
+                raise ValueError("app.factory partition on NAND must provide acc for ftab generation")
+            xip_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
 
         entries[PartitionIndex.HCPU_IMAGE] = (base_addr, size, xip_addr, 0)
         entries[PartitionIndex.HCPU_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
+
+    # Fill dfu entry (optional)
+    if dfu_partition:
+        region = dfu_partition.get('region', '')
+        offset = ptab_module.parse_size(dfu_partition.get('offset', 0))
+        size = ptab_module.parse_size(dfu_partition.get('size', 0))
+        sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
+        base_addr = _select_download_addr(region, sbus_addr, cbus_addr)
+
+        acc = dfu_partition.get('acc')
+        if isinstance(acc, dict):
+            exec_region = str(acc.get('region', '')).strip()
+            exec_offset = ptab_module.parse_size(acc.get('offset', 0))
+            exec_sbus_addr, exec_cbus_addr = ptab_module.resolve_region_address(exec_region, exec_offset, chip_config)
+            xip_addr = _select_exec_addr(exec_region, exec_sbus_addr, exec_cbus_addr)
+        else:
+            mem_type = _get_region_mem_type(region)
+            if mem_type == 'nand':
+                raise ValueError("app.dfu partition on NAND must provide acc for ftab generation")
+            xip_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
+
+        entries[PartitionIndex.LCPU_IMAGE_PING] = (base_addr, size, xip_addr, 0)
+        entries[PartitionIndex.LCPU_IMAGE_PONG] = (base_addr, size, xip_addr, 0)
 
     return entries
 
@@ -281,7 +333,7 @@ def build_image_descriptions(
 
     # Sizes array: index = Flash ID - 2
     sizes = [
-        0xFFFFFFFF,      # [0] LCPU (not used in most configs)
+        dfu_size if dfu_size > 0 else 0xFFFFFFFF,  # [0] LCPU/DFU image
         bootloader_size, # [1] Bootloader
         main_size,       # [2] HCPU (main app)
         0xFFFFFFFF,      # [3] Boot
@@ -303,7 +355,7 @@ def build_image_descriptions(
     return bytes(desc)
 
 
-def build_image_index_table(flash_base: int) -> bytes:
+def build_image_index_table(flash_base: int, dfu_present: bool = False) -> bytes:
     """Build image index table
 
     Image Index entries point to image descriptions by CORE_* index:
@@ -322,7 +374,7 @@ def build_image_index_table(flash_base: int) -> bytes:
 
     # Index corresponds to CORE_* enum
     entries = [
-        0xFFFFFFFF,                                   # [0] LCPU - not used
+        base_offset + 0 * IMAGE_DESCRIPTION_SIZE if dfu_present else 0xFFFFFFFF,  # [0] LCPU/DFU
         base_offset + 1 * IMAGE_DESCRIPTION_SIZE,    # [1] Bootloader → imgs[1]
         base_offset + 2 * IMAGE_DESCRIPTION_SIZE,    # [2] HCPU → imgs[2]
         0xFFFFFFFF,                                   # [3] Boot - not used
@@ -341,7 +393,7 @@ def generate_ftab_binary(
     # Get partitions from v3 ptab
     partitions = ptab_obj.partitions
 
-    # Get flash base for ftab (select based on memory type)
+    # Get flash base for ftab (download/storage view)
     flash_base = 0
     for p in partitions:
         ptype = p.get('type', '')
@@ -349,15 +401,16 @@ def generate_ftab_binary(
             region = p.get('region', '')
             offset = ptab_module.parse_size(p.get('offset', 0))
             sbus_addr, cbus_addr = ptab_module.resolve_region_address(region, offset, chip_config)
-            
-            # Select base address based on memory type
-            memory_info = chip_config.get('memory_info', {}).get(region, {})
-            mem_type = memory_info.get('type', '').lower()
-            flash_base = sbus_addr if mem_type in ('nand', 'psram', 'ram') else cbus_addr
+            # Reuse the same selection rule as partition table entries
+            mpi_name = region if region.startswith('mpi') else None
+            if region.startswith('psram'):
+                mpi_name = 'mpi1' if region == 'psram' else 'mpi{}'.format(region.replace('psram', '') or '1')
+            mem_type = (chip_config.get('memory_info', {}).get(mpi_name or region, {}).get('type') or 'nor').lower()
+            flash_base = cbus_addr if mem_type == 'nor' else sbus_addr
             break
 
     # Build components
-    entries = build_partition_table_entries(partitions, chip_config)
+    entries = build_partition_table_entries(partitions, chip_config, getattr(ptab_obj, 'chip', None))
     partition_table = pack_partition_table(entries)
     image_descriptions = build_image_descriptions(bootloader_size, main_size)
     image_index_table = build_image_index_table(flash_base)

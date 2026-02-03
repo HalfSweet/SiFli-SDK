@@ -737,35 +737,125 @@ def GenPartitionTableHeaderContentV1(env, mems):
 
 
 def GenPartitionTableHeaderContentV3(env, ptab_obj):
-    """Generate ptab.h content for ptab v3
+    """Generate ptab.h content for ptab v3 (acc + aliases).
 
-    Args:
-        env: Build environment
-        ptab_obj: PtabV3 object
-
-    Address selection:
-    - Default: use XIP address (cbus_addr) for compatibility with v1/v2
-    - exec_region: for partitions with exec_region, the exec address uses cbus_addr
-    - accelerate: use accelerate partition's xip address as CODE_START_ADDR
+    This generator keeps v1/v2 compatibility by generating:
+    - Name macros: <NAME>_START_ADDR/_SIZE/_OFFSET
+    - Alias macros: <ALIAS>_START_ADDR/_SIZE/_OFFSET
+    - FS_REGION_* for filesystem-like partitions
+    - FLASH_BOOT_LOADER_* from bootloader.acc (execution address)
+    - CODE_START_ADDR/CODE_SIZE for the current env image (best-effort)
     """
+
     s = ''
     chip_config = ptab_obj.get_chip_config()
     partitions = ptab_obj.partitions
 
-    # Find accelerate partition for CODE_START_ADDR
-    accelerate_partition = None
-    for p in partitions:
-        if p.get('type') == 'app' and p.get('subtype') == 'accelerate':
-            accelerate_partition = p
-            break
+    def _mpi_name_from_region(region):
+        if not region:
+            return None
+        if region.startswith('mpi'):
+            return region
+        if region.startswith('psram'):
+            if region == 'psram':
+                return 'mpi1'
+            suffix = region.replace('psram', '')
+            if suffix.isdigit():
+                return 'mpi{}'.format(suffix)
+        return None
 
-    # Group partitions by region
+    def _get_region_mem_type(region):
+        if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
+            return 'ram'
+        mpi_name = _mpi_name_from_region(region)
+        if mpi_name:
+            info = chip_config.get('memory_info', {}).get(mpi_name, {})
+            mtype = (info.get('type') or '').lower()
+            return mtype or 'nor'
+        return ''
+
+    def _select_start_addr(region, sbus_addr, cbus_addr, subtype):
+        # For RAM-like partitions, always use base address
+        if subtype == 'ram':
+            return sbus_addr
+        mem_type = _get_region_mem_type(region)
+        if mem_type == 'nor':
+            return cbus_addr
+        return sbus_addr
+
+    def _select_exec_addr(region, sbus_addr, cbus_addr):
+        # Execution address selection:
+        # - RAM/NAND/PSRAM: base
+        # - NOR: XIP
+        mem_type = _get_region_mem_type(region)
+        if mem_type in ('ram', 'nand', 'psram'):
+            return sbus_addr
+        return cbus_addr
+
+    def _define_u32(name, value):
+        out = ''
+        out += MakeLine('#undef  {}'.format(name))
+        out += MakeLine('#define {:<50} (0x{:08X})'.format(name, value & 0xFFFFFFFF))
+        return out
+
+    def _define_ref(name, ref):
+        out = ''
+        out += MakeLine('#undef  {}'.format(name))
+        out += MakeLine('#define {:<50} ({})'.format(name, ref))
+        return out
+
+    def _get_flash_boot_loader_size_default():
+        # FLASH_BOOT_LOADER_* macros are used by bootloader link scripts as the
+        # execution region in RAM. For historical compatibility, its SIZE is
+        # derived from chip mem_map.h default (not necessarily the flash
+        # storage partition size).
+        try:
+            sifli_sdk = os.getenv('SIFLI_SDK')
+            if not sifli_sdk:
+                # Fallback for offline tools (e.g. regression script)
+                sifli_sdk = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            if not sifli_sdk:
+                return None
+            chip_dir = (ptab_obj.chip_series or '').lower()
+            if chip_dir and not chip_dir.endswith('x'):
+                chip_dir = chip_dir + 'x'
+            if not chip_dir:
+                return None
+            import gen_link_lds
+            mem_ints = gen_link_lds._load_mem_map_ints(sifli_sdk, chip_dir)
+            v = mem_ints.get('FLASH_BOOT_LOADER_SIZE')
+            if v is None:
+                return None
+            v = int(v)
+            return v if v > 0 else None
+        except Exception:
+            return None
+
+    # Quick lookup maps
+    by_name = {}
+    factory_by_core = {}
+    dfu_by_core = {}
+    bootloader_partition = None
+
+    for p in partitions:
+        pname = p.get('name', '')
+        if pname:
+            by_name[pname.lower()] = p
+        ptype = p.get('type', '')
+        subtype = p.get('subtype', '')
+        core = (p.get('core') or 'HCPU').upper()
+        if ptype == 'bootloader':
+            bootloader_partition = p
+        if ptype == 'app' and subtype == 'factory' and core not in factory_by_core:
+            factory_by_core[core] = p
+        if ptype == 'app' and subtype == 'dfu' and core not in dfu_by_core:
+            dfu_by_core[core] = p
+
+    # Group partitions by region for readability
     region_groups = {}
     for partition in partitions:
         region = partition.get('region', '')
-        if region not in region_groups:
-            region_groups[region] = []
-        region_groups[region].append(partition)
+        region_groups.setdefault(region, []).append(partition)
 
     for region, parts in region_groups.items():
         s += MakeLine('')
@@ -781,118 +871,112 @@ def GenPartitionTableHeaderContentV3(env, ptab_obj):
             size = ptab.parse_size(partition.get('size', 0))
             ptype = partition.get('type', '')
             subtype = partition.get('subtype', '')
+            core = partition.get('core')
 
-            # Get addresses
-            sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config)
+            sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config, core=core)
+            start_addr = _select_start_addr(region, sbus_addr, cbus_addr, subtype)
 
-            # Select address based on memory type:
-            # - PSRAM/RAM/NAND: use base address (sbus_addr) - direct memory access
-            # - NOR Flash: use XIP address (cbus_addr) - execute in place
-            memory_info = chip_config.get('memory_info', {}).get(region, {})
-            mem_type = memory_info.get('type', '').lower()
-            
-            # PSRAM, RAM, and NAND types use base address
-            # Only NOR flash uses XIP address
-            if mem_type in ('psram', 'ram', 'nand') or subtype == 'ram':
-                use_addr = sbus_addr
-            else:
-                # Default to XIP address for NOR Flash
-                use_addr = cbus_addr
-
-            # Generate macros based on name
             name_upper = name.upper()
-            start_addr_name = '{}_START_ADDR'.format(name_upper)
-            size_name = '{}_SIZE'.format(name_upper)
-            offset_name = '{}_OFFSET'.format(name_upper)
+            s += _define_u32('{}_START_ADDR'.format(name_upper), start_addr)
+            s += _define_u32('{}_SIZE'.format(name_upper), size)
+            s += _define_u32('{}_OFFSET'.format(name_upper), offset)
 
-            s += MakeLine('#undef  {}'.format(start_addr_name))
-            s += MakeLine('#define {:<50} (0x{:08X})'.format(start_addr_name, use_addr))
-            s += MakeLine('#undef  {}'.format(size_name))
-            s += MakeLine('#define {:<50} (0x{:08X})'.format(size_name, size))
-            s += MakeLine('#undef  {}'.format(offset_name))
-            s += MakeLine('#define {:<50} (0x{:08X})'.format(offset_name, offset))
+            # Alias macros
+            alias_set = []
+            for a in (partition.get('aliases', []) or []):
+                a = str(a).strip()
+                if not a:
+                    continue
+                a = a.upper()
+                if a not in alias_set:
+                    alias_set.append(a)
+            for a in alias_set:
+                s += _define_u32('{}_START_ADDR'.format(a), start_addr)
+                s += _define_u32('{}_SIZE'.format(a), size)
+                s += _define_u32('{}_OFFSET'.format(a), offset)
 
-            # Handle exec_region - generate code execution address macros
-            exec_region = partition.get('exec_region')
-            if exec_region:
-                exec_offset = ptab.parse_size(partition.get('exec_offset', 0))
-                exec_sbus_addr, exec_cbus_addr = ptab.resolve_region_address(exec_region, exec_offset, chip_config)
-
-                # Bootloader uses FLASH_BOOT_LOADER_* naming for compatibility
-                if ptype == 'bootloader':
-                    code_start_name = 'FLASH_BOOT_LOADER_START_ADDR'
-                    code_size_name = 'FLASH_BOOT_LOADER_SIZE'
-                    code_offset_name = 'FLASH_BOOT_LOADER_OFFSET'
-                else:
-                    code_start_name = 'APP_{}_CODE_START_ADDR'.format(name_upper)
-                    code_size_name = 'APP_{}_CODE_SIZE'.format(name_upper)
-                    code_offset_name = 'APP_{}_CODE_OFFSET'.format(name_upper)
-
-                # Determine exec address based on memory type
-                exec_memory_info = chip_config.get('memory_info', {}).get(exec_region, {})
-                exec_mem_type = exec_memory_info.get('type', '').lower()
-                
-                # PSRAM uses XIP for code execution (like NOR flash)
-                # Only RAM and NAND use base address for execution
-                if exec_mem_type in ('ram', 'nand'):
-                    exec_use_addr = exec_sbus_addr
-                else:
-                    # PSRAM, NOR, and other types use XIP for execution
-                    exec_use_addr = exec_cbus_addr
-                
-                s += MakeLine('#undef  {}'.format(code_start_name))
-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_start_name, exec_use_addr))
-                s += MakeLine('#undef  {}'.format(code_size_name))
-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_size_name, size))
-                s += MakeLine('#undef  {}'.format(code_offset_name))
-                s += MakeLine('#define {:<50} (0x{:08X})'.format(code_offset_name, exec_offset))
-
-            # Handle type=app + subtype=accelerate - as CODE_START_ADDR
-            # accelerate partition address depends on memory type
-            if ptype == 'app' and subtype == 'accelerate':
-                # Use base address for NAND, XIP for NOR
-                if mem_type == 'nand':
-                    accelerate_use_addr = sbus_addr
-                else:
-                    accelerate_use_addr = cbus_addr
-                    
-                s += MakeLine('#undef  CODE_START_ADDR')
-                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_START_ADDR', accelerate_use_addr))
-                s += MakeLine('#undef  CODE_SIZE')
-                s += MakeLine('#define {:<50} (0x{:08X})'.format('CODE_SIZE', size))
-
-            # Handle XIP execution for main/factory partition (no exec_region, no accelerate)
-            # In this case, main partition's XIP address is CODE_START_ADDR
-            is_main_app = (ptype == 'app' and subtype == 'factory') or name in ('main', 'hcpu_flash_code')
-            if is_main_app and not exec_region and not accelerate_partition:
-                s += MakeLine('#define {:<50} ({})'.format('CODE_START_ADDR', start_addr_name))
-                s += MakeLine('#define {:<50} ({})'.format('CODE_SIZE', size_name))
-
-            # Handle type=data + filesystem subtypes - generate FS_REGION_* macros for compatibility
+            # FS_REGION_* macros (compat)
             fs_subtypes = ('littlefs', 'fat', 'fatfs', 'flashdb', 'filesystem')
             if ptype == 'data' and subtype in fs_subtypes:
-                s += MakeLine('#undef  FS_REGION_START_ADDR')
-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_START_ADDR', cbus_addr))
-                s += MakeLine('#undef  FS_REGION_SIZE')
-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_SIZE', size))
-                s += MakeLine('#undef  FS_REGION_OFFSET')
-                s += MakeLine('#define {:<50} (0x{:08X})'.format('FS_REGION_OFFSET', offset))
+                s += _define_u32('FS_REGION_START_ADDR', start_addr)
+                s += _define_u32('FS_REGION_SIZE', size)
+                s += _define_u32('FS_REGION_OFFSET', offset)
 
-            # Handle attrs custom macros
+            # attrs custom macros
             attrs = partition.get('attrs', {})
             if isinstance(attrs, dict):
                 for key, value in attrs.items():
                     if isinstance(value, int):
-                        s += MakeLine('#undef  {}'.format(key))
-                        s += MakeLine('#define {:<50} (0x{:08X})'.format(key, value))
+                        s += _define_u32(str(key), value)
 
-            # Handle rom_index deprecation warning
-            rom_index = partition.get('rom_index')
-            if rom_index is not None:
-                logging.warning(
-                    "Partition '{}' uses deprecated 'rom_index'. "
-                    "Please migrate to name-based section naming.".format(name)
-                )
+    # FLASH_BOOT_LOADER_* macros (execution address, from acc)
+    if bootloader_partition and isinstance(bootloader_partition.get('acc'), dict):
+        acc = bootloader_partition['acc']
+        acc_region = str(acc.get('region', '')).strip()
+        acc_offset = ptab.parse_size(acc.get('offset', 0))
+        bl_size = _get_flash_boot_loader_size_default()
+        if bl_size is None:
+            bl_size = ptab.parse_size(bootloader_partition.get('size', 0))
+        else:
+            # Keep it >= flash storage size (best-effort)
+            storage_size = ptab.parse_size(bootloader_partition.get('size', 0))
+            if storage_size > bl_size:
+                bl_size = storage_size
+        bl_core = bootloader_partition.get('core')
+        acc_sbus, acc_cbus = ptab.resolve_region_address(acc_region, acc_offset, chip_config, core=bl_core)
+        bl_exec_addr = _select_exec_addr(acc_region, acc_sbus, acc_cbus)
+
+        s += MakeLine('')
+        s += MakeLine('')
+        s += MakeLine('/* bootloader exec addr */')
+        s += _define_u32('FLASH_BOOT_LOADER_START_ADDR', bl_exec_addr)
+        s += _define_u32('FLASH_BOOT_LOADER_SIZE', bl_size)
+        s += _define_u32('FLASH_BOOT_LOADER_OFFSET', acc_offset)
+
+    # CODE_START_ADDR/CODE_SIZE for current image (best-effort)
+    env_name = (env.get('name') or '').strip().lower()
+    try:
+        import rtconfig
+        build_core = getattr(rtconfig, 'CORE', None)
+    except Exception:
+        build_core = None
+    build_core = (build_core or 'HCPU').upper()
+
+    code_partition = None
+    if env_name == 'bootloader':
+        code_partition = bootloader_partition
+    elif env_name == 'dfu':
+        code_partition = dfu_by_core.get(build_core)
+    elif env_name == 'main':
+        code_partition = factory_by_core.get(build_core)
+    elif env_name:
+        code_partition = by_name.get(env_name)
+
+    if code_partition:
+        s += MakeLine('')
+        s += MakeLine('')
+        s += MakeLine('/* code start */')
+
+        if code_partition.get('type') == 'bootloader' and isinstance(code_partition.get('acc'), dict):
+            s += _define_ref('CODE_START_ADDR', 'FLASH_BOOT_LOADER_START_ADDR')
+            s += _define_ref('CODE_SIZE', 'FLASH_BOOT_LOADER_SIZE')
+        else:
+            size = ptab.parse_size(code_partition.get('size', 0))
+            acc = code_partition.get('acc')
+            core = code_partition.get('core')
+            if isinstance(acc, dict):
+                acc_region = str(acc.get('region', '')).strip()
+                acc_offset = ptab.parse_size(acc.get('offset', 0))
+                acc_sbus, acc_cbus = ptab.resolve_region_address(acc_region, acc_offset, chip_config, core=core)
+                exec_addr = _select_exec_addr(acc_region, acc_sbus, acc_cbus)
+            else:
+                region = code_partition.get('region', '')
+                offset = ptab.parse_size(code_partition.get('offset', 0))
+                sbus_addr, cbus_addr = ptab.resolve_region_address(region, offset, chip_config, core=core)
+                exec_addr = _select_exec_addr(region, sbus_addr, cbus_addr)
+
+            s += _define_u32('CODE_START_ADDR', exec_addr)
+            s += _define_u32('CODE_SIZE', size)
 
     return s
 

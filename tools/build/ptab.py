@@ -60,14 +60,23 @@ class Ptab:
 
 
 class PtabV3:
-    """ptab v3 格式解析器，使用 YAML 格式"""
+    """ptab v3 格式解析器，使用 YAML 格式
+
+    Notes:
+    - v3 uses YAML dict with top-level keys: version/chip/memory/partitions
+    - Execution address is described by `acc: {region, offset}` (preferred).
+      For backward compatibility, `exec_region/exec_offset` are accepted as
+      deprecated aliases and will be normalized into `acc`.
+    - `aliases` is used to generate legacy macro base names and to provide
+      compatibility with v1/v2 projects.
+    """
 
     def __init__(self, path, data):
         self.path = os.path.abspath(path)
         self._data = data
         self._version = str(data.get('version', '3'))
         self._chip = data.get('chip', '')
-        self._partitions = data.get('partitions', [])
+        self._partitions = self._normalize_partitions(data.get('partitions', []))
         self._memory = data.get('memory', [])  # 外部存储配置
         self._chip_config = None
 
@@ -96,6 +105,86 @@ class PtabV3:
     @property
     def partitions(self):
         return copy.deepcopy(self._partitions)
+
+    def _normalize_partitions(self, partitions):
+        """Normalize partitions to the canonical v3 shape.
+
+        Canonical fields:
+        - name/type/subtype/region/offset/size/core/attrs/aliases/acc
+        """
+        if not isinstance(partitions, list):
+            return []
+
+        normalized = []
+        for p in partitions:
+            if not isinstance(p, dict):
+                continue
+
+            name = (p.get('name') or '').strip()
+            ptype = (p.get('type') or '').strip()
+            subtype = (p.get('subtype') or '').strip() or None
+
+            region = (p.get('region') or '').strip()
+            if region == 'psram':
+                region = 'psram1'
+
+            offset = p.get('offset', 0)
+            size = p.get('size', 0)
+
+            core = (p.get('core') or '').strip() or None
+
+            # attrs: keep as-is but only allow dict
+            attrs = p.get('attrs')
+            if not isinstance(attrs, dict):
+                attrs = {}
+
+            # aliases: list[str]
+            aliases = p.get('aliases')
+            if aliases is None:
+                aliases_list = []
+            elif isinstance(aliases, list):
+                aliases_list = [str(x).strip() for x in aliases if str(x).strip()]
+            else:
+                aliases_list = [str(aliases).strip()] if str(aliases).strip() else []
+
+            # acc: canonical execution address
+            acc = None
+            if isinstance(p.get('acc'), dict):
+                acc_region = (p['acc'].get('region') or '').strip()
+                if acc_region == 'psram':
+                    acc_region = 'psram1'
+                acc_offset = p['acc'].get('offset', 0)
+                if acc_region:
+                    acc = {'region': acc_region, 'offset': acc_offset}
+            else:
+                # Backward compatible deprecated fields
+                exec_region = (p.get('exec_region') or '').strip()
+                if exec_region == 'psram':
+                    exec_region = 'psram1'
+                if exec_region:
+                    acc = {'region': exec_region, 'offset': p.get('exec_offset', 0)}
+
+            out = {
+                'name': name,
+                'type': ptype,
+                'region': region,
+                'offset': offset,
+                'size': size,
+            }
+            if subtype:
+                out['subtype'] = subtype
+            if core:
+                out['core'] = core
+            if attrs:
+                out['attrs'] = attrs
+            if aliases_list:
+                out['aliases'] = aliases_list
+            if acc:
+                out['acc'] = acc
+
+            normalized.append(out)
+
+        return normalized
 
     def is_v2(self):
         return False
@@ -167,23 +256,48 @@ class PtabV3:
         series = self.chip_series
         if not series:
             return []
-        
-        chip_file = Path(__file__).parent.parent / 'SiliconSchema' / 'chips' / f'{series.upper()}x' / 'chip.yaml'
-        if not chip_file.exists():
-            return []
-        
+
+        chips_root = Path(__file__).parent.parent / 'SiliconSchema' / 'chips'
+
+        # Known naming patterns in this repo:
+        # - SF32LB52x/chip.yaml
+        # - SF32LB52_X/chip.yaml
+        preferred_dirs = [
+            chips_root / f'{series.upper()}x',
+            chips_root / f'{series.upper()}_X',
+        ]
+
+        # Also scan any matching directories for robustness
+        scan_dirs = []
         try:
-            with open(chip_file) as f:
-                chip_data = yaml.safe_load(f)
+            for d in chips_root.iterdir():
+                if not d.is_dir():
+                    continue
+                if d.name.upper().startswith(series.upper()):
+                    scan_dirs.append(d)
         except Exception:
-            return []
-        
-        # 在 variants 中查找匹配的型号
-        variants = chip_data.get('variants', [])
-        for variant in variants:
-            if variant.get('part_number', '').upper() == self._chip.upper():
-                return variant.get('memory', [])
-        
+            scan_dirs = []
+
+        checked = []
+        for d in preferred_dirs + scan_dirs:
+            chip_file = d / 'chip.yaml'
+            if not chip_file.exists():
+                continue
+            if chip_file in checked:
+                continue
+            checked.append(chip_file)
+
+            try:
+                with open(chip_file) as f:
+                    chip_data = yaml.safe_load(f)
+            except Exception:
+                continue
+
+            variants = chip_data.get('variants', [])
+            for variant in variants:
+                if variant.get('part_number', '').upper() == self._chip.upper():
+                    return variant.get('memory', []) or []
+
         return []
 
     def content_mems(self, clone=True):
@@ -201,13 +315,22 @@ class PtabV3:
                 continue
 
             # 获取 region 基地址
-            sbus_addr, _ = resolve_region_address(region, 0, chip_config)
+            core = partition.get('core')
+            sbus_base, cbus_base = resolve_region_address(region, 0, chip_config, core=core)
+
+            # Select a "download/storage" base address to mimic v1/v2 behaviour
+            mem_type = _get_region_memory_type(region, chip_config).lower()
+            if mem_type == 'nor':
+                mem_base = cbus_base
+            else:
+                mem_base = sbus_base
+
             mem_name = region
 
             if mem_name not in mems_dict:
                 mems_dict[mem_name] = {
                     'mem': mem_name,
-                    'base': '0x{:08X}'.format(sbus_addr),
+                    'base': '0x{:08X}'.format(mem_base),
                     'regions': []
                 }
 
@@ -218,10 +341,25 @@ class PtabV3:
             ptype = partition.get('type', '')
             subtype = partition.get('subtype', '')
 
+            # Collect tags for v1/v2 compatibility.
+            tags = []
+            for alias in partition.get('aliases', []) or []:
+                alias = str(alias).strip()
+                if alias:
+                    tags.append(alias)
+
+            # Always include NAME as a tag for convenience.
+            if name:
+                tags.append(name.upper())
+
+            # Auto-add FS_REGION tag for filesystem partitions (used by some builders)
+            if ptype == 'data' and subtype in ('littlefs', 'fat', 'fatfs', 'flashdb', 'filesystem'):
+                tags.append('FS_REGION')
+
             region_entry = {
                 'offset': '0x{:08X}'.format(offset),
                 'max_size': '0x{:08X}'.format(size),
-                'tags': [name.upper()] if name else [],
+                'tags': tags,
                 'name': name,
             }
 
@@ -229,7 +367,10 @@ class PtabV3:
             type_list = []
             if ptype in ('bootloader', 'app'):
                 type_list.append('app_img')
-            if partition.get('exec_region') or partition.get('exec_offset') is not None:
+
+            acc = partition.get('acc')
+            if ptype == 'app' and not acc:
+                # XIP case: execution region is the storage region itself
                 type_list.append('app_exec')
             if type_list:
                 region_entry['type'] = type_list
@@ -239,29 +380,43 @@ class PtabV3:
 
             mems_dict[mem_name]['regions'].append(region_entry)
 
-            # 如果有 exec_region，添加执行区域
-            exec_region = partition.get('exec_region')
-            if exec_region and exec_region != region:
-                exec_offset = parse_size(partition.get('exec_offset', 0))
-                exec_sbus_addr, _ = resolve_region_address(exec_region, 0, chip_config)
+            # If `acc` is present and differs from storage, add an exec-only region.
+            if acc and isinstance(acc, dict):
+                exec_region = (acc.get('region') or '').strip()
+                if exec_region == 'psram':
+                    exec_region = 'psram1'
+                if exec_region and exec_region != region:
+                    exec_offset = parse_size(acc.get('offset', 0))
+                    exec_sbus_base, exec_cbus_base = resolve_region_address(exec_region, 0, chip_config, core=core)
 
-                if exec_region not in mems_dict:
-                    mems_dict[exec_region] = {
-                        'mem': exec_region,
-                        'base': '0x{:08X}'.format(exec_sbus_addr),
-                        'regions': []
+                    exec_mem_type = _get_region_memory_type(exec_region, chip_config).lower()
+                    if exec_mem_type == 'nor':
+                        exec_mem_base = exec_cbus_base
+                    else:
+                        exec_mem_base = exec_sbus_base
+
+                    if exec_region not in mems_dict:
+                        mems_dict[exec_region] = {
+                            'mem': exec_region,
+                            'base': '0x{:08X}'.format(exec_mem_base),
+                            'regions': []
+                        }
+
+                    exec_tags = []
+                    if ptype == 'bootloader':
+                        # For v1/v2 compatibility, bootloader exec region is tagged.
+                        exec_tags.append('FLASH_BOOT_LOADER')
+
+                    exec_entry = {
+                        'offset': '0x{:08X}'.format(exec_offset),
+                        'max_size': '0x{:08X}'.format(size),
+                        'tags': exec_tags,
+                        'name': name,
+                        'type': ['app_exec']
                     }
-
-                exec_entry = {
-                    'offset': '0x{:08X}'.format(exec_offset),
-                    'max_size': '0x{:08X}'.format(size),
-                    'tags': [],
-                    'name': name,
-                    'type': ['app_exec']
-                }
-                if partition.get('core'):
-                    exec_entry['core'] = partition['core']
-                mems_dict[exec_region]['regions'].append(exec_entry)
+                    if partition.get('core'):
+                        exec_entry['core'] = partition['core']
+                    mems_dict[exec_region]['regions'].append(exec_entry)
 
         mems = list(mems_dict.values())
         return copy.deepcopy(mems) if clone else mems
@@ -359,7 +514,8 @@ def load_chip_config(chip_series: str) -> Dict[str, Any]:
 def resolve_region_address(
     region: str,
     offset: int,
-    chip_config: Dict[str, Any]
+    chip_config: Dict[str, Any],
+    core: Optional[str] = None,
 ) -> Tuple[int, int]:
     """解析 region 到物理地址
 
@@ -373,6 +529,12 @@ def resolve_region_address(
     """
     mpi_config = chip_config.get('mpi', {})
     ram_config = chip_config.get('ram', {})
+
+    core_key = None
+    if core:
+        core_lower = str(core).lower()
+        if core_lower in ('hcpu', 'lcpu', 'acpu'):
+            core_key = core_lower
 
     # MPI region
     if region in mpi_config:
@@ -390,8 +552,12 @@ def resolve_region_address(
     if region == 'hpsys_ram' or region.startswith('hpsys'):
         hpsys = ram_config.get('hpsys', {})
         ram = hpsys.get('ram', {})
-        # 使用第一个 ram bank 的 hcpu offset 作为基地址
-        for bank_name, bank in ram.items():
+        # 使用第一个 ram bank 的 offset 作为基地址（按 core 选择）
+        for _, bank in ram.items():
+            if core_key and core_key in bank:
+                base_offset = bank.get(core_key, {}).get('offset')
+                if base_offset is not None:
+                    return base_offset + offset, base_offset + offset
             hcpu = bank.get('hcpu', {})
             base_offset = hcpu.get('offset', 0x20000000)
             return base_offset + offset, base_offset + offset
@@ -401,7 +567,11 @@ def resolve_region_address(
     if region == 'lpsys_ram' or region.startswith('lpsys'):
         lpsys = ram_config.get('lpsys', {})
         ram = lpsys.get('ram', {})
-        for bank_name, bank in ram.items():
+        for _, bank in ram.items():
+            if core_key and core_key in bank:
+                base_offset = bank.get(core_key, {}).get('offset')
+                if base_offset is not None:
+                    return base_offset + offset, base_offset + offset
             hcpu = bank.get('hcpu', {})
             base_offset = hcpu.get('offset', 0x20400000)
             return base_offset + offset, base_offset + offset
@@ -426,6 +596,36 @@ def resolve_region_address(
 
     logging.warning(f"Unknown region: {region}, using offset as address")
     return offset, offset
+
+
+def _get_region_memory_type(region: str, chip_config: Dict[str, Any]) -> str:
+    """Get memory type for a region.
+
+    For mpi/psram regions, consult chip_config['memory_info'] by canonical mpi name.
+    For RAM regions, returns 'ram'.
+    """
+    if region == 'hpsys_ram' or region.startswith('hpsys') or region == 'lpsys_ram' or region.startswith('lpsys'):
+        return 'ram'
+
+    # Normalize psram aliases to mpiN
+    psram_match = re.match(r'^psram(\d+)?$', region)
+    if psram_match:
+        mpi_num = psram_match.group(1) or '1'
+        region = f'mpi{mpi_num}'
+
+    memory_info = chip_config.get('memory_info', {})
+    info = memory_info.get(region, {})
+    mtype = info.get('type')
+    if mtype is not None:
+        return str(mtype)
+
+    # Default heuristic: when memory type is not specified for an mpi region,
+    # treat it as NOR for backward compatibility (v1/v2 commonly use XIP
+    # address as the "base" for flash regions).
+    if re.match(r'^mpi\d+$', region):
+        return 'nor'
+
+    return ''
 
 
 def _parse_ptab_file(path):

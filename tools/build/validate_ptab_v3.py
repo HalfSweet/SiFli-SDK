@@ -15,7 +15,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # Add tools/build to path
 _TOOLS_BUILD_PATH = Path(__file__).parent
@@ -61,7 +61,7 @@ def validate_name(name: str, partition_idx: int) -> List[ValidationError]:
 def validate_type(ptype: str, partition_name: str) -> List[ValidationError]:
     """Validate partition type"""
     errors = []
-    valid_types = {'ptab', 'bootloader', 'app', 'data', 'code', 'ftab'}
+    valid_types = {'ftab', 'bootloader', 'app', 'data'}
 
     if not ptype:
         errors.append(ValidationError(
@@ -91,9 +91,9 @@ def validate_region(region: str, partition_name: str, chip_config: dict) -> List
     ram_config = chip_config.get('ram', {})
 
     known_regions = set(mpi_config.keys())
-    known_regions.update(['hpsys_ram', 'lpsys_ram', 'psram1', 'psram'])
+    known_regions.update(['hpsys_ram', 'lpsys_ram', 'psram', 'psram1', 'psram2'])
 
-    if region not in known_regions and not region.startswith('mpi'):
+    if region not in known_regions and not region.startswith('mpi') and not region.startswith('psram'):
         errors.append(ValidationError(
             f"Partition '{partition_name}': unknown region '{region}'",
             severity="warning"
@@ -120,22 +120,37 @@ def validate_size(value, field_name: str, partition_name: str) -> List[Validatio
     return errors
 
 
-def validate_exec_region_constraint(partitions: List[dict]) -> List[ValidationError]:
-    """Validate: if exec_region exists, must have accelerate partition"""
+def validate_acc(acc, partition_name: str, chip_config: dict, core: Optional[str]) -> List[ValidationError]:
+    """Validate acc structure and address parsing."""
     errors = []
 
-    has_exec_region = False
-    has_accelerate = False
+    if acc is None:
+        return errors
 
-    for p in partitions:
-        if p.get('exec_region'):
-            has_exec_region = True
-        if p.get('type') == 'app' and p.get('subtype') == 'accelerate':
-            has_accelerate = True
-
-    if has_exec_region and not has_accelerate:
+    if not isinstance(acc, dict):
         errors.append(ValidationError(
-            "exec_region is used but no partition with type='app' + subtype='accelerate' found"
+            f"Partition '{partition_name}': 'acc' must be a dict with keys {{region, offset}}"
+        ))
+        return errors
+
+    acc_region = acc.get('region', '')
+    acc_offset = acc.get('offset', 0)
+
+    if not acc_region:
+        errors.append(ValidationError(
+            f"Partition '{partition_name}': acc.region is required when acc is present"
+        ))
+        return errors
+
+    errors.extend(validate_region(str(acc_region), f"{partition_name}.acc", chip_config))
+    errors.extend(validate_size(acc_offset, 'acc.offset', partition_name))
+
+    # Try resolving address (this may still succeed for unknown region but is useful for early errors)
+    try:
+        ptab_module.resolve_region_address(str(acc_region), ptab_module.parse_size(acc_offset), chip_config, core=core)
+    except Exception as e:
+        errors.append(ValidationError(
+            f"Partition '{partition_name}': failed to resolve acc address: {e}"
         ))
 
     return errors
@@ -156,6 +171,79 @@ def validate_bootloader_unique(partitions: List[dict]) -> List[ValidationError]:
         errors.append(ValidationError(
             f"Multiple bootloader partitions found: {', '.join(names)}"
         ))
+
+    return errors
+
+
+def validate_ftab_unique(partitions: List[dict]) -> List[ValidationError]:
+    """Validate: exactly one ftab partition"""
+    errors = []
+    ftabs = [p for p in partitions if p.get('type') == 'ftab']
+
+    if len(ftabs) == 0:
+        errors.append(ValidationError("No partition with type='ftab' found"))
+    elif len(ftabs) > 1:
+        names = [p.get('name', '?') for p in ftabs]
+        errors.append(ValidationError(f"Multiple ftab partitions found: {', '.join(names)}"))
+
+    return errors
+
+
+def validate_factory_unique_by_core(partitions: List[dict]) -> List[ValidationError]:
+    """Validate: at most one factory app per core."""
+    errors = []
+    seen: Dict[str, List[str]] = {}
+
+    for p in partitions:
+        if p.get('type') != 'app' or p.get('subtype') != 'factory':
+            continue
+        core = (p.get('core') or 'HCPU').upper()
+        seen.setdefault(core, []).append(p.get('name', '?'))
+
+    for core, names in seen.items():
+        if len(names) > 1:
+            errors.append(ValidationError(
+                f"Multiple factory app partitions found for core {core}: {', '.join(names)}"
+            ))
+
+    return errors
+
+
+def validate_name_unique(partitions: List[dict]) -> List[ValidationError]:
+    errors = []
+    seen: Dict[str, int] = {}
+    for idx, p in enumerate(partitions):
+        name = p.get('name', '')
+        if not name:
+            continue
+        if name in seen:
+            errors.append(ValidationError(
+                f"Duplicate partition name '{name}' found at indices {seen[name]} and {idx}"
+            ))
+        else:
+            seen[name] = idx
+    return errors
+
+
+def validate_aliases_conflict(partitions: List[dict]) -> List[ValidationError]:
+    errors = []
+    owner: Dict[str, str] = {}
+
+    for p in partitions:
+        pname = p.get('name', '?')
+        aliases = p.get('aliases', []) or []
+        if not isinstance(aliases, list):
+            continue
+        for a in aliases:
+            a_norm = str(a).strip().upper()
+            if not a_norm:
+                continue
+            if a_norm in owner and owner[a_norm] != pname:
+                errors.append(ValidationError(
+                    f"Alias macro base '{a_norm}' is used by multiple partitions: {owner[a_norm]} and {pname}"
+                ))
+            else:
+                owner[a_norm] = pname
 
     return errors
 
@@ -222,8 +310,18 @@ def validate_ptab_v3(ptab_obj) -> List[ValidationError]:
         errors.append(ValidationError("Not a v3 format ptab file"))
         return errors
 
+    # Header checks
+    if not str(getattr(ptab_obj, 'version', '') or '') == '3':
+        errors.append(ValidationError("ptab.yaml: version must be 3"))
+    chip = getattr(ptab_obj, 'chip', '') or ''
+    if not str(chip).strip():
+        errors.append(ValidationError("ptab.yaml: 'chip' is required"))
+
     chip_config = ptab_obj.get_chip_config()
     partitions = ptab_obj.partitions
+
+    errors.extend(validate_name_unique(partitions))
+    errors.extend(validate_aliases_conflict(partitions))
 
     # Per-partition validations
     for idx, p in enumerate(partitions):
@@ -232,10 +330,19 @@ def validate_ptab_v3(ptab_obj) -> List[ValidationError]:
         errors.extend(validate_region(p.get('region', ''), p.get('name', '?'), chip_config))
         errors.extend(validate_size(p.get('offset', 0), 'offset', p.get('name', '?')))
         errors.extend(validate_size(p.get('size', 0), 'size', p.get('name', '?')))
+        errors.extend(validate_acc(p.get('acc'), p.get('name', '?'), chip_config, p.get('core')))
 
     # Global validations
-    errors.extend(validate_exec_region_constraint(partitions))
     errors.extend(validate_bootloader_unique(partitions))
+    errors.extend(validate_ftab_unique(partitions))
+    errors.extend(validate_factory_unique_by_core(partitions))
+
+    # Bootloader must have acc (execution address)
+    bootloaders = [p for p in partitions if p.get('type') == 'bootloader']
+    if len(bootloaders) == 1:
+        if not isinstance(bootloaders[0].get('acc'), dict):
+            errors.append(ValidationError("bootloader partition must provide 'acc: {region, offset}'"))
+
     errors.extend(validate_no_overlap(partitions, chip_config))
     errors.extend(validate_rom_index_deprecation(partitions))
 

@@ -1,77 +1,57 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 SiFli Technologies(Nanjing) Co., Ltd
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Migrate ptab.json (v1/v2) to ptab.yaml (v3) format.
+Migrate legacy ptab.json (v1/v2) to ptab.yaml (v3).
+
+This tool focuses on keeping build compatibility:
+- Converts regions to v3 `partitions` with `type/subtype/region/offset/size`.
+- Converts exec-only regions (region has `exec` but no `img`) into `acc` on the
+  corresponding `bootloader/app` partition.
+- Uses legacy `tags` as `aliases` (dedup, case-insensitive) when needed.
 
 Usage:
-    python migrate_ptab_to_v3.py --input ptab.json --output ptab.yaml --chip SF32LB52
+  python3 tools/build/migrate_ptab_to_v3.py -i customer/boards/<board>/ptab.json -o /tmp/ptab.yaml -c SF32LB52JUD6
 """
 
-from __future__ import annotations
-
 import argparse
+import os
 import json
 import re
 import sys
 from collections import OrderedDict
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 
-def parse_args() -> argparse.Namespace:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Migrate ptab.json (v1/v2) to ptab.yaml (v3)",
-        allow_abbrev=False
+        description='Migrate ptab.json (v1/v2) to ptab.yaml (v3)',
+        allow_abbrev=False,
     )
+    parser.add_argument('-i', '--input', required=True, help='Input ptab.json path')
+    parser.add_argument('-o', '--output', help='Output ptab.yaml path (default: stdout)')
     parser.add_argument(
-        "--input", "-i",
-        required=True,
-        help="Path to input ptab.json file"
+        '-c', '--chip',
+        default='SF32LB52JUD6',
+        help='Chip part number for ptab v3 (default: SF32LB52JUD6)',
     )
-    parser.add_argument(
-        "--output", "-o",
-        help="Path to output ptab.yaml file (default: same dir, .yaml extension)"
-    )
-    parser.add_argument(
-        "--chip", "-c",
-        default="SF32LB52",
-        help="Chip series name (default: SF32LB52)"
-    )
-    parser.add_argument(
-        "--dry-run", "-n",
-        action="store_true",
-        help="Print output to stdout instead of writing file"
-    )
+    parser.add_argument('--no-header', action='store_true', help='Do not emit header comments')
     return parser.parse_args()
 
 
-def load_v1v2_ptab(path: Path) -> tuple:
-    """Load v1/v2 ptab.json and return (version, mems)"""
-    with open(path) as f:
+def _load_ptab_json(path: str) -> List[Dict[str, Any]]:
+    with open(path, 'r', encoding='utf-8') as f:
         data = json.load(f, object_pairs_hook=OrderedDict)
-
     if not isinstance(data, list):
-        raise ValueError("Invalid ptab format: expected list")
-
-    # Check for version header
-    if data and isinstance(data[0], dict) and 'version' in data[0]:
-        version = str(data[0]['version'])
-        mems = data[1:]
-    else:
-        version = "1"
-        mems = data
-
-    return version, mems
+        raise ValueError('Invalid ptab.json: expected a list')
+    return data
 
 
-def infer_region_from_mem(mem_name: str) -> str:
-    """Infer v3 region name from v1/v2 mem name"""
-    # Common mappings
-    mappings = {
+def _mem_to_region(mem_name: str) -> str:
+    mem_name = (mem_name or '').strip().lower()
+    mapping = {
         'flash1': 'mpi1',
         'flash2': 'mpi2',
         'flash3': 'mpi3',
@@ -79,202 +59,271 @@ def infer_region_from_mem(mem_name: str) -> str:
         'flash5': 'mpi5',
         'psram1': 'psram1',
         'psram1_cbus': 'psram1',
+        'psram2': 'psram2',
         'hpsys_ram': 'hpsys_ram',
         'lpsys_ram': 'lpsys_ram',
     }
-    return mappings.get(mem_name, mem_name)
+    return mapping.get(mem_name, mem_name)
 
 
-def infer_type_subtype(region_data: dict) -> tuple:
-    """Infer type and subtype from v1/v2 region data"""
-    name = region_data.get('name', '')
-    tags = region_data.get('tags', [])
-    ftab = region_data.get('ftab', {})
-    type_list = region_data.get('type', [])
-
-    ptype = None
-    subtype = None
-
-    # Check for ftab name
-    ftab_name = ftab.get('name', '') if isinstance(ftab, dict) else ''
-
-    if name == 'ftab' or ftab_name == 'ftab' or 'FLASH_TABLE' in tags:
-        ptype = 'ptab'
-        subtype = 'primary'
-    elif name == 'bootloader' or ftab_name == 'bootloader' or 'FLASH_BOOT_LOADER' in tags:
-        ptype = 'bootloader'
-    elif name == 'dfu' or ftab_name == 'dfu' or 'DFU' in str(tags):
-        ptype = 'app'
-        subtype = 'dfu'
-    elif name == 'main' or ftab_name == 'main':
-        ptype = 'app'
-        subtype = 'factory'
-    elif 'app_img' in type_list or 'app_exec' in type_list:
-        ptype = 'app'
-        # Check for int_res indicators
-        if any('IMG' in t or 'FONT' in t for t in tags):
-            subtype = 'int_res'
-        else:
-            subtype = 'factory'
-    elif any('FS_' in t or 'KVDB' in t for t in tags):
-        ptype = 'data'
-        subtype = 'nvds'
-    elif any('RAM_DATA' in t for t in tags):
-        ptype = 'data'
-        subtype = 'ram'
-    else:
-        # Default to data for unknown
-        ptype = 'data'
-
-    return ptype, subtype
+def _sanitize_name(name: str) -> str:
+    name = (name or '').strip().lower()
+    name = re.sub(r'[^a-z0-9_]', '_', name)
+    if not name:
+        return name
+    if name[0].isdigit():
+        name = 'p_' + name
+    return name
 
 
-def convert_to_v3(version: str, mems: list, chip: str) -> dict:
-    """Convert v1/v2 mems to v3 format"""
-    v3 = {
-        'version': 3,
-        'chip': chip,
-        'partitions': []
-    }
+def _dedup_aliases(aliases: List[str], canonical_name: str) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    canonical_upper = (canonical_name or '').upper()
+    for a in aliases or []:
+        a = str(a or '').strip()
+        if not a:
+            continue
+        up = a.upper()
+        if up == canonical_upper:
+            continue
+        if up in seen:
+            continue
+        seen.add(up)
+        out.append(a)
+    return out
 
-    # Track which partitions we've seen (for exec regions)
-    seen_partitions = {}
 
-    for mem in mems:
-        mem_name = mem.get('mem', '')
-        region = infer_region_from_mem(mem_name)
+def _infer_type_subtype_core(region: str, region_data: Dict[str, Any]) -> Tuple[str, Optional[str], Optional[str]]:
+    tags = region_data.get('tags') or []
+    tags = [str(t) for t in tags if str(t).strip()]
+    img = str(region_data.get('img') or '').strip().lower()
+    ftab = region_data.get('ftab') if isinstance(region_data.get('ftab'), dict) else {}
+    ftab_name = str(ftab.get('name') or '').strip().lower()
 
-        for region_data in mem.get('regions', []):
-            tags = region_data.get('tags', [])
-            name = region_data.get('name', '')
-            type_list = region_data.get('type', [])
+    tags_upper = [t.upper() for t in tags]
 
-            # Skip empty regions with no meaningful data
-            if not name and not tags and not region_data.get('ftab'):
+    # ftab
+    if 'FLASH_TABLE' in tags_upper or img == 'ftab' or ftab_name == 'ftab':
+        return 'ftab', None, None
+
+    # bootloader
+    if img == 'bootloader' or ftab_name == 'bootloader' or 'FLASH_BOOT_LOADER' in tags_upper:
+        return 'bootloader', None, 'HCPU'
+
+    # app (factory/dfu)
+    if 'DFU_FLASH_CODE' in tags_upper or img == 'dfu' or ftab_name == 'dfu':
+        return 'app', 'dfu', 'HCPU'
+    if 'HCPU_FLASH_CODE' in tags_upper or img == 'main' or ftab_name == 'main':
+        return 'app', 'factory', 'HCPU'
+
+    # filesystem / nvds
+    if 'FS_REGION' in tags_upper:
+        return 'data', 'filesystem', None
+    if any(t.startswith('KVDB_') for t in tags_upper):
+        return 'data', 'nvds', None
+
+    # RAM-like regions
+    if region in ('hpsys_ram', 'lpsys_ram') or region.startswith('psram'):
+        return 'data', 'ram', None
+
+    # default
+    return 'data', 'raw', None
+
+
+def _infer_partition_name(region_data: Dict[str, Any]) -> str:
+    tags = region_data.get('tags') or []
+    tags = [str(t) for t in tags if str(t).strip()]
+    img = str(region_data.get('img') or '').strip().lower()
+    ftab = region_data.get('ftab') if isinstance(region_data.get('ftab'), dict) else {}
+    ftab_name = str(ftab.get('name') or '').strip().lower()
+
+    # Prefer first tag as it maps to legacy macro base names.
+    if tags:
+        return _sanitize_name(tags[0])
+    if ftab_name:
+        return _sanitize_name(ftab_name)
+    if img:
+        return _sanitize_name(img)
+    return ''
+
+
+def migrate_ptab_json_to_v3(ptab_json: List[Dict[str, Any]], chip: str) -> Dict[str, Any]:
+    # Map exec-only regions: exec_name -> {region, offset}
+    exec_only: Dict[str, Dict[str, Any]] = {}
+
+    # Collect all regions first
+    regions_flat: List[Tuple[str, Dict[str, Any]]] = []
+    for mem in ptab_json:
+        if not isinstance(mem, dict):
+            continue
+        region = _mem_to_region(mem.get('mem'))
+        for r in mem.get('regions') or []:
+            if not isinstance(r, dict):
                 continue
+            regions_flat.append((region, r))
 
-            # Skip pure exec regions (they'll be merged with img regions)
-            if 'app_exec' in type_list and 'app_img' not in type_list:
-                # This is an exec-only region, find the corresponding img region
-                if name and name in seen_partitions:
-                    # Add exec_region/exec_offset to existing partition
-                    partition = seen_partitions[name]
-                    partition['exec_region'] = region
-                    partition['exec_offset'] = region_data.get('offset', '0')
+            exec_name = str(r.get('exec') or '').strip()
+            img_name = str(r.get('img') or '').strip()
+            if exec_name and not img_name:
+                # exec-only region (acc source)
+                exec_only[exec_name] = {
+                    'region': region,
+                    'offset': r.get('offset', '0'),
+                }
+
+    partitions: List[Dict[str, Any]] = []
+
+    for region, r in regions_flat:
+        # Skip exec-only regions; they'll be converted into acc
+        if r.get('exec') and not r.get('img'):
+            continue
+
+        # Skip zero-sized regions
+        try:
+            if int(str(r.get('max_size', '0')), 0) == 0:
                 continue
+        except Exception:
+            pass
 
-            # Infer type/subtype
-            ptype, subtype = infer_type_subtype(region_data)
+        # Legacy ptab.json may contain overlapping "macro regions" in internal RAM.
+        # For v3 we only keep non-overlapping partitions by default.
+        tags = r.get('tags') or []
+        tags_upper = [str(t).strip().upper() for t in tags if str(t).strip()]
+        if region in ('hpsys_ram', 'lpsys_ram'):
+            if any(t in (
+                'HCPU_RAM_DATA',
+                'HCPU_RO_DATA',
+                'HPSYS_MBOX',
+                'HCPU2LCPU_MB_CH2_BUF',
+                'HCPU2LCPU_MB_CH1_BUF',
+                'LCPU2HCPU_MB_CH1_BUF',
+                'LCPU2HCPU_MB_CH2_BUF',
+            ) for t in tags_upper):
+                # Keep BOOTLOADER_RAM_DATA and LPSYS_RAM as they are typically non-overlapping.
+                if 'BOOTLOADER_RAM_DATA' not in tags_upper and 'LPSYS_RAM' not in tags_upper:
+                    continue
 
-            # Generate name if missing
-            if not name:
-                if tags:
-                    # Use first tag as name, convert to lowercase
-                    name = tags[0].lower().replace('_start_addr', '').replace('_size', '')
-                else:
-                    name = f"unnamed_{len(v3['partitions'])}"
+        name = _infer_partition_name(r)
+        if not name:
+            continue
 
-            # Clean up name for v3 format (lowercase, underscores only)
-            name = re.sub(r'[^a-z0-9_]', '_', name.lower())
-            if name[0].isdigit():
-                name = 'p_' + name
+        offset = r.get('offset', '0')
+        size = r.get('max_size', '0')
 
-            partition = {
-                'name': name,
-                'type': ptype,
-                'region': region,
-                'offset': region_data.get('offset', '0'),
-                'size': region_data.get('max_size', '0'),
-            }
+        ptype, subtype, core = _infer_type_subtype_core(region, r)
 
-            if subtype:
-                partition['subtype'] = subtype
+        # Build aliases from legacy tags
+        tags = [str(t) for t in tags if str(t).strip()]
+        aliases = _dedup_aliases(tags, name)
 
-            # Check for exec address in ftab
-            ftab = region_data.get('ftab', {})
-            if isinstance(ftab, dict) and 'address' in ftab:
-                if 'xip' in ftab['address'] and 'base' not in ftab['address']:
-                    # This is a pure XIP region
-                    pass
+        part: Dict[str, Any] = OrderedDict()
+        part['name'] = name
+        part['type'] = ptype
+        if subtype:
+            part['subtype'] = subtype
+        part['region'] = region
+        part['offset'] = offset
+        part['size'] = size
+        if core:
+            part['core'] = core
+        if aliases:
+            part['aliases'] = aliases
 
-            # Add core if present
-            if 'core' in region_data:
-                partition['core'] = region_data['core']
+        # Convert exec-only region into acc for bootloader/app partitions
+        if ptype in ('bootloader', 'app'):
+            # Determine image name to search for exec-only mapping.
+            img_name = str(r.get('img') or '').strip()
+            if img_name and img_name in exec_only:
+                acc_src = exec_only[img_name]
+                part['acc'] = OrderedDict([
+                    ('region', acc_src.get('region', '')),
+                    ('offset', acc_src.get('offset', '0')),
+                ])
 
-            # Store for later reference
-            if name:
-                seen_partitions[name] = partition
+        partitions.append(part)
 
-            v3['partitions'].append(partition)
+    # Auto-add calibration partition for common layouts (compat with legacy ftab)
+    has_calibration = False
+    flash_table_part: Optional[Dict[str, Any]] = None
+    for p in partitions:
+        if p.get('type') == 'ftab':
+            flash_table_part = p
+        if p.get('type') == 'data' and p.get('subtype') == 'calibration':
+            has_calibration = True
 
-    return v3
+    if flash_table_part and not has_calibration:
+        try:
+            flash_off = int(str(flash_table_part.get('offset', '0')), 0)
+        except Exception:
+            flash_off = 0
+        try:
+            flash_size = int(str(flash_table_part.get('size', '0')), 0)
+        except Exception:
+            flash_size = 0x8000
+        cal_off = flash_off + flash_size
+        cal_part: Dict[str, Any] = OrderedDict()
+        cal_part['name'] = 'calibration'
+        cal_part['type'] = 'data'
+        cal_part['subtype'] = 'calibration'
+        cal_part['region'] = flash_table_part.get('region', 'mpi2')
+        cal_part['offset'] = '0x{:08X}'.format(cal_off)
+        cal_part['size'] = '0x{:08X}'.format(0x2000)
+        # Insert right after flash table for readability
+        idx = partitions.index(flash_table_part) + 1
+        partitions.insert(idx, cal_part)
+
+    out: Dict[str, Any] = OrderedDict()
+    out['version'] = 3
+    out['chip'] = chip
+    out['partitions'] = partitions
+    return out
 
 
-class OrderedDumper(yaml.SafeDumper):
-    """YAML dumper that preserves order and uses nice formatting"""
+class _OrderedDumper(yaml.SafeDumper):
     pass
 
 
-def str_representer(dumper, data):
-    """Represent strings, using | for multiline"""
-    if '\n' in data:
-        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
-    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
-
-
-def ordered_dict_representer(dumper, data):
+def _ordered_dict_representer(dumper: yaml.Dumper, data: OrderedDict) -> yaml.nodes.MappingNode:
     return dumper.represent_mapping('tag:yaml.org,2002:map', data.items())
 
 
-OrderedDumper.add_representer(str, str_representer)
-OrderedDumper.add_representer(OrderedDict, ordered_dict_representer)
+_OrderedDumper.add_representer(OrderedDict, _ordered_dict_representer)
 
 
-def main() -> None:
-    args = parse_args()
+def main() -> int:
+    args = _parse_args()
 
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"Error: Input file not found: {input_path}")
-        sys.exit(1)
+    ptab_json = _load_ptab_json(args.input)
+    v3 = migrate_ptab_json_to_v3(ptab_json, args.chip)
 
-    # Load v1/v2 ptab
-    version, mems = load_v1v2_ptab(input_path)
-    print(f"Loaded ptab v{version} from {input_path}")
-
-    # Convert to v3
-    v3_data = convert_to_v3(version, mems, args.chip)
-    print(f"Converted {len(v3_data['partitions'])} partitions")
-
-    # Generate YAML output
-    yaml_output = yaml.dump(
-        v3_data,
-        Dumper=OrderedDumper,
+    yaml_body = yaml.dump(
+        v3,
+        Dumper=_OrderedDumper,
         default_flow_style=False,
         allow_unicode=True,
         sort_keys=False,
-        indent=2
+        indent=2,
     )
 
-    # Add header comment
-    header = f"""\
-# ptab v3 - Partition Table
-# Migrated from: {input_path.name}
-# Chip: {args.chip}
-#
-# This file was auto-generated. Please review and adjust as needed.
+    if not args.no_header:
+        header = (
+            '# ptab v3 - Partition Table\n'
+            '# Migrated from: {}\n'
+            '# Chip: {}\n'
+            '#\n'
+            '# Auto-generated. Please review and adjust as needed.\n\n'
+        ).format(os.path.basename(args.input), args.chip)
+        yaml_body = header + yaml_body
 
-"""
-    yaml_output = header + yaml_output
-
-    if args.dry_run:
-        print("\n--- Generated ptab.yaml ---")
-        print(yaml_output)
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(yaml_body)
+        print('Written to: {}'.format(args.output))
     else:
-        output_path = Path(args.output) if args.output else input_path.with_suffix('.yaml')
-        output_path.write_text(yaml_output)
-        print(f"Written to: {output_path}")
+        sys.stdout.write(yaml_body)
+    return 0
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    raise SystemExit(main())

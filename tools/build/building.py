@@ -492,15 +492,37 @@ def ProgramAsmBuild(target, source, env):
     
 def LdsBuild(target, source, env):
     import rtconfig
+    import ptab as ptab_module
+
+    # Detect ptab version
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    target_path = str(target[0])
+
+    if ptab_obj and ptab_obj.is_v3():
+        # v3: Jinja2-only rendering (no gcc -E)
+        import gen_link_lds
+
+        build_dir = os.path.dirname(os.path.abspath(target_path))
+        rtconfig_h_path = os.path.join(build_dir, 'rtconfig.h')
+        rtconfig_defines = gen_link_lds._parse_rtconfig_defines(rtconfig_h_path)
+        defines = gen_link_lds.compute_link_defines(
+            ptab_obj,
+            env.get('name', 'main'),
+            getattr(rtconfig, 'CORE', 'HCPU'),
+            rtconfig_defines,
+        )
+        gen_link_lds.render_link_lds(str(source[0]), target_path, defines)
+        return
+
+    # v1/v2: legacy gcc -E preprocessing
     include_paths = ['-I{}'.format(path.replace('\\', '/')) for path in env['CPPPATH']]
-
-    target_path = os.path.join(os.path.dirname(str(target[0])), 'link_copy.lds')
-
     p = subprocess.Popen([rtconfig.CC, '-E', '-P'] + include_paths + ['-x', 'c', str(source[0])], stdout=subprocess.PIPE)
     (result, error) = p.communicate()
-    f = open(target_path, "wb")
-    f.write(result)
-    f.close()   
+    with open(target_path, "wb") as f:
+        f.write(result)
 
 def FsBuild(target, source, env):
     import rtconfig
@@ -533,10 +555,26 @@ def FsBuild(target, source, env):
         subprocess.run([env['fs_mkimg'],env['fs_root'],target,str(page_number),str(page_size)], check=True)
 
 def ModifyLdsTargets(target, source, env):
+    import ptab as ptab_module
+
     target = [os.path.join(env['build_dir'], 'link_copy.lds')]
     if 'PTAB_HEADER' in env:
         env.Depends(target, env['PTAB_HEADER'])
-    
+
+    # v3 requires Jinja2 template (link.jinja2), and must not fallback to gcc -E
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    if ptab_obj and ptab_obj.is_v3():
+        src0 = str(source[0]) if source else ''
+        base, ext = os.path.splitext(src0)
+        template_path = base + '.jinja2'
+        if not os.path.exists(template_path):
+            logging.error(f"ptab v3 requires jinja2 link template: {template_path}")
+            raise SystemExit(1)
+        source = [File(template_path)]
+
     return target, source
 
 def EmbeddedImgCFileBuild(target, source, env):
