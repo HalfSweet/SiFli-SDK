@@ -1527,6 +1527,7 @@ def BuildJLinkLoadScript(main_env):
     # example1:  {"main": {"ROM1.bin": 0x18000000, "ROM2.bin": 0x18200000}}
     img_download_info = {}
     is_ptab_v3 = False
+    int_res_download_items = {}
 
     if 'PARTITION_TABLE' in main_env:
         ptab_obj = ptab.load_ptab(main_env['PARTITION_TABLE'], fatal=True)
@@ -1535,6 +1536,19 @@ def BuildJLinkLoadScript(main_env):
         if ptab_obj.is_v3():
             is_ptab_v3 = True
             ConstructImgDownloadInfoV3(img_download_info, ptab_obj)
+            # Pre-compute int_res download addresses (per core)
+            chip_config = ptab_obj.get_chip_config()
+            for core in ('HCPU', 'LCPU', 'ACPU'):
+                items = []
+                for part in ptab.iter_int_res_partitions_v3(ptab_obj, core=core):
+                    name = part.get('name', '')
+                    if not name:
+                        continue
+                    region = part.get('region', '')
+                    offset = ptab.parse_size(part.get('offset', 0))
+                    addr = ptab.get_download_addr_v3(region, offset, chip_config, core=part.get('core'))
+                    items.append({'file': '{}.bin'.format(name.upper()), 'addr': addr})
+                int_res_download_items[core] = items
         elif ptab_obj.is_v2():
             ConstructImgDownloadInfoV2(img_download_info, mems)
         else:
@@ -1588,6 +1602,33 @@ def BuildJLinkLoadScript(main_env):
                 s_file += MakeLine('FILE{}={}'.format(s_num,os.path.relpath(bin_file, work_dir)))
                 s_file += MakeLine('ADDR{}=0x{:08X}'.format(s_num,info))
                 s_num += 1
+
+                # ptab v3: load int_res bins from the same `int_res/` directory
+                if is_ptab_v3:
+                    core = 'HCPU'
+                    if env.get('name') == 'lcpu':
+                        core = 'LCPU'
+                    elif env.get('name') == 'acpu':
+                        core = 'ACPU'
+
+                    res_dir = os.path.dirname(bin_file)
+                    code_base_u = os.path.basename(bin_file).upper()
+                    for item in int_res_download_items.get(core, []):
+                        if item['file'].upper() == code_base_u:
+                            continue
+                        res_path = os.path.join(res_dir, item['file'])
+                        if not os.path.isfile(res_path):
+                            continue
+                        if os.path.getsize(res_path) <= 0:
+                            continue
+                        s += MakeLine('loadbin {} 0x{:08X}'.format(os.path.relpath(res_path, work_dir), item['addr']))
+                        download_file.append({
+                            'name': os.path.relpath(res_path, work_dir),
+                            'addr': item['addr']
+                        })
+                        s_file += MakeLine('FILE{}={}'.format(s_num,os.path.relpath(res_path, work_dir)))
+                        s_file += MakeLine('ADDR{}=0x{:08X}'.format(s_num,item['addr']))
+                        s_num += 1
         else:
             hex_file = str(env['program_hex'][0])
             # load address is not defined, load hex

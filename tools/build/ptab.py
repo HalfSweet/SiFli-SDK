@@ -627,6 +627,52 @@ def _get_region_memory_type(region: str, chip_config: Dict[str, Any]) -> str:
     return ''
 
 
+def get_download_addr_v3(
+    region: str,
+    offset: int,
+    chip_config: Dict[str, Any],
+    core: Optional[str] = None,
+) -> int:
+    """Get download/storage address for a v3 partition.
+
+    Address selection rule:
+    - NOR: use CBUS (XIP) view
+    - NAND/PSRAM/RAM: use SBUS/base view
+
+    Notes:
+    - This helper is intended for ptab v3 integrations.
+    - `offset` should be in bytes.
+    """
+    sbus_addr, cbus_addr = resolve_region_address(region, offset, chip_config, core=core)
+    mem_type = _get_region_memory_type(region, chip_config).lower()
+    return cbus_addr if mem_type == 'nor' else sbus_addr
+
+
+def iter_int_res_partitions_v3(ptab_obj: Any, core: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Iterate `int_res` partitions for ptab v3.
+
+    Filters:
+    - type == 'data'
+    - subtype == 'int_res'
+    - core matches (default: 'HCPU')
+    """
+    if not ptab_obj or not hasattr(ptab_obj, 'is_v3') or not ptab_obj.is_v3():
+        return []
+
+    core_u = (core or 'HCPU').strip().upper()
+    out: List[Dict[str, Any]] = []
+    for p in getattr(ptab_obj, 'partitions', []) or []:
+        if not isinstance(p, dict):
+            continue
+        if p.get('type') != 'data' or p.get('subtype') != 'int_res':
+            continue
+        pcore = (p.get('core') or 'HCPU').strip().upper()
+        if pcore != core_u:
+            continue
+        out.append(p)
+    return out
+
+
 def _parse_ptab_file(path):
     """解析 ptab 文件（JSON 格式）"""
     with open(path) as f:

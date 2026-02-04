@@ -25,11 +25,10 @@ __ROM_EX_SIZE = {{ hex32(defines['__ROM_EX_SIZE']) }};
 __PSRAM_BASE = {{ hex32(defines['__PSRAM_BASE']) }};
 __PSRAM_SIZE = {{ hex32(defines['__PSRAM_SIZE']) }};
 
-__ROM2_BASE = {{ hex32(defines['__ROM2_BASE']) }};
-__ROM2_SIZE = {{ hex32(defines['__ROM2_SIZE']) }};
-
-__ROM3_BASE = {{ hex32(defines['__ROM3_BASE']) }};
-__ROM3_SIZE = {{ hex32(defines['__ROM3_SIZE']) }};
+{% for r in defines.get('INT_RES_PARTS', []) %}
+__{{ r.name_upper }}_BASE = {{ hex32(r.base) }};
+__{{ r.name_upper }}_SIZE = {{ hex32(r.size) }};
+{% endfor %}
 
 MEMORY
 {
@@ -37,8 +36,9 @@ MEMORY
     RAM (rw) : ORIGIN = __RAM_BASE, LENGTH = __RAM_SIZE
     ROM_EX(rw):ORIGIN = __ROM_EX_BASE, LENGTH = __ROM_EX_SIZE
     PSRAM(rw): ORIGIN = __PSRAM_BASE, LENGTH = __PSRAM_SIZE
-    ROM2 (rx): ORIGIN = __ROM2_BASE, LENGTH = __ROM2_SIZE
-    ROM3 (rx): ORIGIN = __ROM3_BASE, LENGTH = __ROM3_SIZE
+{% for r in defines.get('INT_RES_PARTS', []) %}
+    {{ r.name_upper }} (rx): ORIGIN = __{{ r.name_upper }}_BASE, LENGTH = __{{ r.name_upper }}_SIZE
+{% endfor %}
 }
 
 ENTRY(Reset_Handler)
@@ -196,5 +196,11 @@ SECTIONS
     __end__ = .;
     PROVIDE(end = .);
   } > RAM AT > RAM
-}
 
+{% for r in defines.get('INT_RES_PARTS', []) %}
+  .{{ r.name }} :
+  {
+    *(.{{ r.name_upper }}_IMG*)
+  } > {{ r.name_upper }}
+{% endfor %}
+}

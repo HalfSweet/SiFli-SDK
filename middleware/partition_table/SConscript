@@ -64,10 +64,33 @@ if GetDepend('USING_PARTITION_TABLE'):
     ptab_header = env.PtabHeader(os.path.join(output_dir, 'ptab.h'), File(src_file))
     env['PTAB_HEADER'] = ptab_header
 
-    # 生成 ftab.bin（仅在主项目中，避免与子项目冲突）
+    # 生成 ftab.bin（仅 ptab v3 + 主项目中，避免与子项目冲突）
     if not IsChildProjEnv():
-        ftab_bin = env.FtabBin(os.path.join(output_dir, 'ftab.bin'), File(src_file))
-        env['FTAB_BIN'] = ftab_bin
+        try:
+            import ptab as ptab_module
+            ptab_obj = ptab_module.load_ptab(src_file, fatal=False) if src_file else None
+        except Exception:
+            ptab_obj = None
+
+        if ptab_obj and ptab_obj.is_v3():
+            imgs_info = []
+            target_list = []
+            for e in GetEnvList():
+                # embedded project binaries are embedded into parent image
+                if IsChildProjEnv(e) and e.get('IMG_EMBEDDED'):
+                    continue
+                proj_name = e['name'] if IsChildProjEnv(e) else 'main'
+                if 'program_binary' in e:
+                    imgs_info.append({"name": proj_name, "binary": e['program_binary']})
+                if 'target' in e:
+                    target_list += e['target']
+                if 'program_binary' in e:
+                    target_list += e['program_binary']
+                if 'program_hex' in e:
+                    target_list += e['program_hex']
+            ftab_bin = env.FtabBin(os.path.join(output_dir, 'ftab.bin'), File(src_file), IMGS_INFO=imgs_info)
+            Depends(ftab_bin, target_list)
+            env['FTAB_BIN'] = ftab_bin
 
 group = []
     

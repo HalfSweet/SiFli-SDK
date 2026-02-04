@@ -375,27 +375,149 @@ def RomLibBuild(target, source, env):
 def SetRomSymFilter(filter):
     Env['ROM_SYM_FILTER'] = filter
 
+def _remove_file_or_dir(path: str) -> None:
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    elif os.path.exists(path):
+        os.remove(path)
+
+def _ihex_has_data(path: str) -> bool:
+    """Return True if an Intel HEX file contains any data record."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                line = (line or '').strip()
+                if not line.startswith(':') or len(line) < 11:
+                    continue
+                try:
+                    length = int(line[1:3], 16)
+                    rectype = int(line[7:9], 16)
+                except Exception:
+                    continue
+                if rectype == 0 and length > 0:
+                    return True
+        return False
+    except Exception:
+        return False
+
+
+def ModifyProgramBinaryTargets(target, source, env):
+    import ptab as ptab_module
+
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    if ptab_obj and ptab_obj.is_v3():
+        elf_path = str(source[0]) if source else ''
+        elf_dir = os.path.dirname(elf_path)
+        out_dir = os.path.join(elf_dir, 'int_res')
+        proj_name = env.get('name') or os.path.splitext(os.path.basename(elf_path))[0] or 'main'
+        code_base = 'app' if proj_name == 'main' else proj_name
+        target = [os.path.join(out_dir, code_base + '.bin')]
+    return target, source
+
+
+def ModifyProgramHexTargets(target, source, env):
+    import ptab as ptab_module
+
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    if ptab_obj and ptab_obj.is_v3():
+        elf_path = str(source[0]) if source else ''
+        elf_dir = os.path.dirname(elf_path)
+        out_dir = os.path.join(elf_dir, 'int_res')
+        proj_name = env.get('name') or os.path.splitext(os.path.basename(elf_path))[0] or 'main'
+        code_base = 'app' if proj_name == 'main' else proj_name
+        target = [os.path.join(out_dir, code_base + '.hex')]
+    return target, source
+
+
 def ProgramBinaryBuild(target, source, env):
     import rtconfig
+    import ptab as ptab_module
+
     program_file = str(source[0])
     program_filename = os.path.basename(program_file)
     program_name = os.path.splitext(program_filename)[0]
     target_path = os.path.dirname(program_file)
-    bin_path = os.path.join(target_path, program_name + '.bin')
-    
-    if os.path.exists(bin_path):
-        shutil.rmtree(bin_path)
+    whole_bin_path = os.path.join(target_path, program_name + '.bin')
+    code_bin_path = str(target[0])
+    out_dir = os.path.dirname(code_bin_path)
+
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    # ptab v3 (gcc): split int_res sections into `int_res/` and keep whole image in `<program>.bin`
+    if rtconfig.PLATFORM == 'gcc' and ptab_obj and ptab_obj.is_v3():
+        # Prepare output dir (keep .hex outputs intact)
+        if os.path.exists(out_dir) and not os.path.isdir(out_dir):
+            _remove_file_or_dir(out_dir)
+        os.makedirs(out_dir, exist_ok=True)
+        for d in os.listdir(out_dir):
+            if d.lower().endswith('.bin'):
+                _remove_file_or_dir(os.path.join(out_dir, d))
+
+        code_base_upper = os.path.splitext(os.path.basename(code_bin_path))[0].upper()
+        used_sections = []
+        all_sections = []
+        present_sections = []
+        core = getattr(rtconfig, 'CORE', 'HCPU')
+        for p in ptab_module.iter_int_res_partitions_v3(ptab_obj, core=core):
+            name = (p.get('name') or '').strip()
+            if not name:
+                continue
+            if name.upper() == code_base_upper:
+                logging.error(
+                    f"int_res partition name '{name}' conflicts with code image name '{code_base_upper}' "
+                    f"(file name collision in '{out_dir}')"
+                )
+                raise SystemExit(1)
+            sec = '.{}'.format(name)
+            all_sections.append(sec)
+            out_file = os.path.join(out_dir, '{}.bin'.format(name.upper()))
+            _remove_file_or_dir(out_file)
+            res = subprocess.run([rtconfig.OBJCPY, '-Obinary', '-j{}'.format(sec), program_file, out_file])
+            if res.returncode != 0:
+                _remove_file_or_dir(out_file)
+                continue
+            present_sections.append(sec)
+            if not os.path.exists(out_file) or os.path.getsize(out_file) <= 0:
+                _remove_file_or_dir(out_file)
+                continue
+            used_sections.append(sec)
+
+        exclude_args = ['-R{}'.format(s) for s in all_sections]
+
+        # Whole image (compat): may include all sections
+        if os.path.exists(whole_bin_path) and os.path.isdir(whole_bin_path):
+            _remove_file_or_dir(whole_bin_path)
+        subprocess.run([rtconfig.OBJCPY, '-Obinary', program_file, whole_bin_path], check=True)
+        # Code-only image (target): exclude int_res output sections
+        res = subprocess.run([rtconfig.OBJCPY, '-Obinary'] + exclude_args + [program_file, code_bin_path])
+        if res.returncode != 0 and present_sections and present_sections != all_sections:
+            exclude_args = ['-R{}'.format(s) for s in present_sections]
+            subprocess.run([rtconfig.OBJCPY, '-Obinary'] + exclude_args + [program_file, code_bin_path], check=True)
+        else:
+            res.check_returncode()
+        return
+
+    if os.path.exists(whole_bin_path):
+        _remove_file_or_dir(whole_bin_path)
     # TODO: only support keil and gcc
     if rtconfig.PLATFORM == 'armcc':
-        subprocess.run(['fromelf', '--bin', str(source[0]), '--output', bin_path], check=True)
-        if os.path.isdir(bin_path):
+        subprocess.run(['fromelf', '--bin', str(source[0]), '--output', whole_bin_path], check=True)
+        if os.path.isdir(whole_bin_path):
             # delete the folder to clean old files
-            shutil.rmtree(bin_path)
-            subprocess.run(['fromelf', '--bin', str(source[0]), '--output', bin_path], check=True)        
-            dir_list = os.listdir(bin_path)
+            shutil.rmtree(whole_bin_path)
+            subprocess.run(['fromelf', '--bin', str(source[0]), '--output', whole_bin_path], check=True)        
+            dir_list = os.listdir(whole_bin_path)
             for d in dir_list:
                 if '.bin' not in d:
-                    shutil.move(os.path.join(bin_path, d), os.path.join(bin_path, d + '.bin'))
+                    shutil.move(os.path.join(whole_bin_path, d), os.path.join(whole_bin_path, d + '.bin'))
         # print Object/Image Component Sizes
         subprocess.run(['fromelf', '-z', str(source[0])], check=True)
     elif rtconfig.PLATFORM == 'gcc':
@@ -412,30 +534,91 @@ def ProgramBinaryBuild(target, source, env):
                 ex_imgs.append(i)
 
         if len(ex_imgs) == 0:
-            subprocess.run([rtconfig.OBJCPY, '-Obinary', str(source[0]), bin_path], check=True)
+            subprocess.run([rtconfig.OBJCPY, '-Obinary', str(source[0]), whole_bin_path], check=True)
         else:
-            os.mkdir(bin_path)
+            os.mkdir(whole_bin_path)
             exclude_ex_imgs = []
             for i in ex_imgs:
-                ex_img_path = os.path.join(bin_path, 'ER_IROM{}.bin'.format(i))
+                ex_img_path = os.path.join(whole_bin_path, 'ER_IROM{}.bin'.format(i))
                 subprocess.run([rtconfig.OBJCPY, '-Obinary', '-j.rom{}'.format(i), str(source[0]), ex_img_path], check=True)
                 exclude_ex_imgs += ['-R.rom{}'.format(i)]
 
-            rom1_path = ex_img_path = os.path.join(bin_path, 'ER_IROM1.bin')
+            rom1_path = ex_img_path = os.path.join(whole_bin_path, 'ER_IROM1.bin')
             subprocess.run([rtconfig.OBJCPY, '-Obinary'] + exclude_ex_imgs + [str(source[0]), rom1_path], check=True)
 
 
 def ProgramHexBuild(target, source, env):
+    import ptab as ptab_module
+
     program_file = str(source[0])
     program_filename = os.path.basename(program_file)
     program_name = os.path.splitext(program_filename)[0]
     target_path = os.path.dirname(program_file)
-    hex_path = os.path.join(target_path, program_name + '.hex')
+    whole_hex_path = os.path.join(target_path, program_name + '.hex')
+    code_hex_path = str(target[0])
+    out_dir = os.path.dirname(code_hex_path)
  
-    if os.path.exists(hex_path):
-        shutil.rmtree(hex_path)
-    #TODO: only support keil and gcc
     import rtconfig
+
+    ptab_obj = env.GetPtab() if hasattr(env, "GetPtab") else None
+    if ptab_obj is None and 'PARTITION_TABLE' in env:
+        ptab_obj = ptab_module.load_ptab(env['PARTITION_TABLE'], fatal=False)
+
+    # ptab v3 (gcc): split int_res sections into `int_res/` and keep whole image in `<program>.hex`
+    if rtconfig.PLATFORM == 'gcc' and ptab_obj and ptab_obj.is_v3():
+        # Prepare output dir (keep .bin outputs intact)
+        if os.path.exists(out_dir) and not os.path.isdir(out_dir):
+            _remove_file_or_dir(out_dir)
+        os.makedirs(out_dir, exist_ok=True)
+        for d in os.listdir(out_dir):
+            if d.lower().endswith('.hex'):
+                _remove_file_or_dir(os.path.join(out_dir, d))
+
+        code_base_upper = os.path.splitext(os.path.basename(code_hex_path))[0].upper()
+        used_sections = []
+        all_sections = []
+        present_sections = []
+        core = getattr(rtconfig, 'CORE', 'HCPU')
+        for p in ptab_module.iter_int_res_partitions_v3(ptab_obj, core=core):
+            name = (p.get('name') or '').strip()
+            if not name:
+                continue
+            if name.upper() == code_base_upper:
+                logging.error(
+                    f"int_res partition name '{name}' conflicts with code image name '{code_base_upper}' "
+                    f"(file name collision in '{out_dir}')"
+                )
+                raise SystemExit(1)
+            sec = '.{}'.format(name)
+            all_sections.append(sec)
+            out_file = os.path.join(out_dir, '{}.hex'.format(name.upper()))
+            _remove_file_or_dir(out_file)
+            res = subprocess.run([rtconfig.OBJCPY, '-O', 'ihex', '-j{}'.format(sec), program_file, out_file])
+            if res.returncode != 0:
+                _remove_file_or_dir(out_file)
+                continue
+            present_sections.append(sec)
+            if not os.path.exists(out_file) or os.path.getsize(out_file) <= 0 or not _ihex_has_data(out_file):
+                _remove_file_or_dir(out_file)
+                continue
+            used_sections.append(sec)
+
+        exclude_args = ['-R{}'.format(s) for s in all_sections]
+
+        if os.path.exists(whole_hex_path) and os.path.isdir(whole_hex_path):
+            _remove_file_or_dir(whole_hex_path)
+        subprocess.run([rtconfig.OBJCPY, '-O', 'ihex', program_file, whole_hex_path], check=True)
+        res = subprocess.run([rtconfig.OBJCPY, '-O', 'ihex'] + exclude_args + [program_file, code_hex_path])
+        if res.returncode != 0 and present_sections and present_sections != all_sections:
+            exclude_args = ['-R{}'.format(s) for s in present_sections]
+            subprocess.run([rtconfig.OBJCPY, '-O', 'ihex'] + exclude_args + [program_file, code_hex_path], check=True)
+        else:
+            res.check_returncode()
+        return
+
+    if os.path.exists(whole_hex_path):
+        _remove_file_or_dir(whole_hex_path)
+    #TODO: only support keil and gcc
     if rtconfig.PLATFORM == 'gcc':
         # check whether there're multiple binary 
         ex_imgs = []
@@ -448,29 +631,29 @@ def ProgramHexBuild(target, source, env):
                 ex_imgs.append(i)
 
         if len(ex_imgs) == 0:
-            subprocess.run([rtconfig.OBJCPY, '-O', 'ihex', str(source[0]), hex_path], check=True)
+            subprocess.run([rtconfig.OBJCPY, '-O', 'ihex', str(source[0]), whole_hex_path], check=True)
         else:
-            os.mkdir(hex_path)
+            os.mkdir(whole_hex_path)
             exclude_ex_imgs = []
             for i in ex_imgs:
-                ex_img_path = os.path.join(hex_path, 'ER_IROM{}.hex'.format(i))
+                ex_img_path = os.path.join(whole_hex_path, 'ER_IROM{}.hex'.format(i))
                 subprocess.run([rtconfig.OBJCPY, '-O', 'ihex', '-j.rom{}'.format(i), str(source[0]), ex_img_path], check=True)
                 exclude_ex_imgs += ['-R.rom{}'.format(i)]
 
-            rom1_path = ex_img_path = os.path.join(hex_path, 'ER_IROM1.hex')
+            rom1_path = ex_img_path = os.path.join(whole_hex_path, 'ER_IROM1.hex')
             subprocess.run([rtconfig.OBJCPY, '-O', 'ihex'] + exclude_ex_imgs + [str(source[0]), rom1_path], check=True)
 
 
     else:    
-        subprocess.run(['fromelf', '--i32', str(source[0]), '--output', hex_path], check=True)    
-        if os.path.isdir(hex_path):
+        subprocess.run(['fromelf', '--i32', str(source[0]), '--output', whole_hex_path], check=True)    
+        if os.path.isdir(whole_hex_path):
             # delete the folder to clean old files
-            shutil.rmtree(hex_path)
-            subprocess.run(['fromelf', '--i32', str(source[0]), '--output', hex_path], check=True)    
-            dir_list = os.listdir(hex_path)
+            shutil.rmtree(whole_hex_path)
+            subprocess.run(['fromelf', '--i32', str(source[0]), '--output', whole_hex_path], check=True)    
+            dir_list = os.listdir(whole_hex_path)
             for d in dir_list:
                 if '.hex' not in d:
-                    shutil.move(os.path.join(hex_path, d), os.path.join(hex_path, d + '.hex'))
+                    shutil.move(os.path.join(whole_hex_path, d), os.path.join(whole_hex_path, d + '.hex'))
 
 
 def ProgramAsmBuild(target, source, env):
@@ -752,6 +935,8 @@ def GenDownloadScript(main_env):
         dependent_files.append(main_env['PARTITION_TABLE'])
     elif not GetDepend('USING_PARTITION_TABLE'):
         logging.warning("Partition table is not used.")
+    if 'FTAB_BIN' in main_env:
+        dependent_files.append(main_env['FTAB_BIN'])
 
     for img in CustomImgList:
         if img['program_binary']:
@@ -1461,12 +1646,12 @@ def PrepareBuilding(env, has_libcpu=False, remove_components=[], buildlib=None):
     
     # add ProgramBinary builder
     bin_action = SCons.Action.Action(ProgramBinaryBuild, 'Generating $TARGET ...')
-    bld = Builder(action = bin_action, suffix = '.bin')
+    bld = Builder(action = bin_action, suffix = '.bin', emitter = ModifyProgramBinaryTargets)
     Env.Append(BUILDERS = {"ProgramBinary": bld})
     
     # add ProgramHex builder
     hex_action = SCons.Action.Action(ProgramHexBuild, 'Generating $TARGET ...')
-    bld = Builder(action = hex_action, suffix = '.hex')
+    bld = Builder(action = hex_action, suffix = '.hex', emitter = ModifyProgramHexTargets)
     Env.Append(BUILDERS = {"ProgramHex": bld})
 
     # add ProgramAsm builder

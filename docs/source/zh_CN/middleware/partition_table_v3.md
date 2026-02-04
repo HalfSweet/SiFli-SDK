@@ -323,6 +323,32 @@ acc 字段用于指定代码不能在 XiP 的时候实际的执行地址（搬�
 | `ftab.bin` | 二进制 Flash Table，用于 bootloader |
 | `link_copy.lds` | 链接脚本 |
 
+### int_res 分割产物（仅 ptab v3 + GCC）
+
+ptab v3 支持 `type: data` + `subtype: int_res` 的“内置资源分区”。构建系统会按分区动态生成链接脚本片段，为每个 `int_res` 分区分配专用 `MEMORY`，并生成输出段 `.<name>`（全小写）。
+
+默认的段收集规则为：
+
+```ld
+.<name> : { *(.<NAME>_IMG*) } > <NAME>
+```
+
+构建产物会统一输出到各工程 build 目录下的 `int_res/`：
+
+- 代码镜像（从 ELF 导出并排除所有 `.<int_res_name>` 段）：
+  - 主工程 `main`：`build_xxx/int_res/app.bin`、`build_xxx/int_res/app.hex`
+  - 其它工程：`build_xxx/<proj>/int_res/<proj>.bin`、`build_xxx/<proj>/int_res/<proj>.hex`
+- 资源镜像（每个 `int_res` 分区一个文件，`NAME = partition.name.upper()`）：
+  - `build_xxx/int_res/<NAME>.bin`、`build_xxx/int_res/<NAME>.hex`
+
+同时仍保留整镜像（代码 + 资源的备用镜像）：
+
+- `build_xxx/main.bin`、`build_xxx/main.hex`
+
+如果某个 `int_res` 分区在 ELF 中没有对应输出段（或段为空），则会跳过生成该分区的 `<NAME>.bin/.hex`（不报错）。
+
+另外，`int_res` 分区名应避免与代码镜像名冲突（如主工程固定为 `app.bin`），以避免在大小写不敏感文件系统下发生文件名覆盖。
+
 ### ftab.bin 生成
 
 v3 格式下，`ftab.bin` 直接通过 Python 脚本生成，不再编译 ftab 子工程：

@@ -49,6 +49,14 @@ partitions:
       offset: 0
     core: HCPU
 
+  - name: test_res
+    type: data
+    subtype: int_res
+    region: mpi2
+    offset: 0x4A0000
+    size: 512KB
+    core: HCPU
+
   # DFU application
   - name: dfu_flash_code
     type: app

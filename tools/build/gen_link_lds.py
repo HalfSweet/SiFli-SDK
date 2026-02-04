@@ -4,7 +4,7 @@
 import ast
 import os
 import re
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
@@ -304,12 +304,6 @@ def compute_link_defines(ptab_obj, build_name: str, build_core: str, rtconfig_de
     lcpu_rom_base = lpsys_base_lcpu
     lcpu_rom_size = int(mem_map_ints.get('LCPU_RAM_CODE_SIZE', 0)) * 2
 
-    # Flash2 resource windows (static for sf32lb52x)
-    rom2_base = int(mem_map_ints.get('QSPI2_MEM_BASE', 0x12000000))
-    rom2_size = int(mem_map_ints.get('HCPU_FLASH2_IMG_SIZE', 0))
-    rom3_base = rom2_base + rom2_size
-    rom3_size = int(mem_map_ints.get('HCPU_FLASH2_FONT_SIZE', 0))
-
     # PSRAM window from ptab (optional)
     psram_part = (
         _match_partition_by_alias(partitions, 'PSRAM_DATA')
@@ -417,10 +411,33 @@ def compute_link_defines(ptab_obj, build_name: str, build_core: str, rtconfig_de
     out['__ROM_EX_SIZE'] = 0
     out['__PSRAM_BASE'] = int(psram_base)
     out['__PSRAM_SIZE'] = int(psram_size)
-    out['__ROM2_BASE'] = int(rom2_base)
-    out['__ROM2_SIZE'] = int(rom2_size)
-    out['__ROM3_BASE'] = int(rom3_base)
-    out['__ROM3_SIZE'] = int(rom3_size)
+
+    # int_res partitions: dedicated MEMORY regions and output sections
+    reserved_memory_names = {'ROM', 'RAM', 'ROM_EX', 'PSRAM'}
+    int_res_parts: List[Dict[str, Any]] = []
+    for p in ptab_module.iter_int_res_partitions_v3(ptab_obj, core=build_core):
+        name = (p.get('name') or '').strip()
+        if not name:
+            continue
+        name_upper = name.upper()
+        if name_upper in reserved_memory_names:
+            raise LinkLdsError('int_res partition name conflicts with reserved MEMORY name: {}'.format(name_upper))
+
+        region = (p.get('region') or '').strip()
+        offset = ptab_module.parse_size(p.get('offset', 0))
+        size = ptab_module.parse_size(p.get('size', 0))
+        if size <= 0:
+            continue
+        base = ptab_module.get_download_addr_v3(region, offset, chip_config, core=p.get('core'))
+        int_res_parts.append(
+            {
+                'name': name,
+                'name_upper': name_upper,
+                'base': int(base),
+                'size': int(size),
+            }
+        )
+    out['INT_RES_PARTS'] = int_res_parts
     return out
 
 

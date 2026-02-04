@@ -19,10 +19,18 @@ __RAM_SIZE = {{ hex32(defines['__RAM_SIZE']) }};
 __STACK_SIZE = 0x00000400;
 __HEAP_SIZE  = 0x00000000;
 
+{% for r in defines.get('INT_RES_PARTS', []) %}
+__{{ r.name_upper }}_BASE = {{ hex32(r.base) }};
+__{{ r.name_upper }}_SIZE = {{ hex32(r.size) }};
+{% endfor %}
+
 MEMORY
 {
     ROM (rx)  : ORIGIN = __ROM_BASE,  LENGTH = __ROM_SIZE
     RAM (rw)  : ORIGIN = __RAM_BASE,  LENGTH = __RAM_SIZE
+{% for r in defines.get('INT_RES_PARTS', []) %}
+    {{ r.name_upper }} (rx): ORIGIN = __{{ r.name_upper }}_BASE, LENGTH = __{{ r.name_upper }}_SIZE
+{% endfor %}
 }
 
 ENTRY(Reset_Handler)
@@ -161,4 +169,11 @@ SECTIONS
   } > RAM AT > RAM
 
   /* ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed with stack") */
+
+{% for r in defines.get('INT_RES_PARTS', []) %}
+  .{{ r.name }} :
+  {
+    *(.{{ r.name_upper }}_IMG*)
+  } > {{ r.name_upper }}
+{% endfor %}
 }
