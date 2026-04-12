@@ -2,22 +2,14 @@
 
 ## 安装准备
 
-### Python 环境
+### `uv` 环境
 
-对 Windows 用户来说，需要保证环境变量中存在 `Python` 环境变量。
+Windows 脚本主链路不再要求用户预装系统 Python。当前支持的方式是通过 `uv` 按需准备锁定的 Python 3.12.0 运行时。
 
-如果没有安装 Python，请参考 [Python 官网](https://www.python.org/downloads/) 下载并安装 Python 3.9 以上，3.14以下的版本。安装完成后，确保将 Python 添加到系统的环境变量中。
-
-![](image/2025-05-26-13-39-17.png)
-
-```{note}
-对国内用户来说，可以使用如下国内镜像链接下载Python安装包：<https://mirrors.ustc.edu.cn/python/3.12.0/python-3.12.0.exe>
-```
-
-安装完成之后，可以在终端中运行`python --version`命令来检查 Python 是否安装成功。正常情况下，应该会输出 Python 的版本信息，例如：
+安装好 `uv` 后，请在 PowerShell 中执行以下命令确认可用：
 
 ```powershell
-Python 3.12.0
+uv --version
 ```
 
 ### Git 环境
@@ -118,17 +110,20 @@ cd C:\OpenSiFli\SiFli-SDK
 .\install.ps1
 ```
 
-```{warning} 
-需要注意的是，不能使用pyenv工具管理系统的python环境，否则在后续的过程中可能会发生错误。
-```
+`install.ps1` 会自动完成以下工作：
+
+- 通过 `uv` 准备锁定的 Python 3.12.0 运行时
+- 根据 `tools/locks/default/pyproject.toml` 和 `tools/locks/default/uv.lock` 同步锁定的 Python 依赖
+- 根据 `tools/locks/default/lock.json` 安装当前 profile 绑定的工具版本
+- 在 `SIFLI_SDK_TOOLS_PATH` 下初始化 profile 级别的 Conan 环境
 
 ````{note}
 国内用户可以改用下面的命令通过国内镜像源安装工具包，避免默认源下载速度慢。注意，选择执行下述命令的时候不需要再执行上述代码块中的命令。
 
 ```powershell
 cd C:\OpenSiFli\SiFli-SDK
-$env:SIFLI_SDK_GITHUB_ASSETS="downloads.sifli.com/github_assets"
-$env:PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/simple"
+$env:SIFLI_SDK_MIRROR="https://downloads.sifli.com/github_assets"
+$env:SIFLI_SDK_PYPI_DEFAULT_INDEX="https://mirrors.ustc.edu.cn/pypi/simple"
 .\install.ps1
 ```
 
@@ -166,6 +161,8 @@ cd C:\OpenSiFli\SiFli-SDK
 .\export.ps1
 ```
 
+`export.ps1` 现在直接使用 `install.ps1` 创建的 Python 虚拟环境。如果当前 profile 的虚拟环境尚未安装，或者被手动删除，`export.ps1` 会立即失败，并提示先执行 `.\install.ps1`。
+
 ````{note}
 如果按照上述说明设置过自定义工具安装路径，那么在运行 `export.ps1` 脚本之前**必须**设置`SIFLI_SDK_TOOLS_PATH` 变量
 ```powershell
@@ -180,7 +177,7 @@ $env:SIFLI_SDK_TOOLS_PATH="D:\SIFLI\tools"
 ```
 
 ```{note}
-目前的脚本可能有一些偶现的bug，如果在编译的时候提示找不到`arm-none-eabi-gcc`等命令，可以尝试运行两次`. export.ps1`解决。
+`export.ps1` 现在会在导出环境前检查当前 profile 的 Python 环境、工具版本和 Conan 配置是否仍与仓库锁文件一致。如果检测到漂移，交互式终端可能会提示修复；非交互场景下会直接以确定性错误退出。
 ```
 
 ### Windows Terminal 快捷配置

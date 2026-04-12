@@ -44,7 +44,7 @@ sudo pacman -S --needed gcc git make flex bison gperf python cmake ninja ccache 
 :::::{tab-item} macOS
 :sync: macOS
 
-SiFli-SDK will use the Python version installed by default on macOS.
+SiFli-SDK no longer relies on the system Python installation. `install.sh` uses `uv` to prepare the locked Python 3.12.0 runtime and dependencies for the active SDK profile.
 
 - Install CMake and Ninja build tools:
   - Homebrew users:
@@ -75,6 +75,14 @@ You must install XCode command line tools by running the `xcode-select --install
 :::::
 
 ::::::
+
+## Install `uv`
+
+`uv` is the only supported bootstrap tool for the current install/export workflow. Please install `uv` first and ensure the following command works in your terminal:
+
+```bash
+uv --version
+```
 
 ## Get SiFli-SDK
 
@@ -138,16 +146,19 @@ cd ~/OpenSiFli/SiFli-SDK
 ./install.sh
 ```
 
-```{warning} 
-It should be noted that the pyenv tool should not be used to manage the Python environment of the system. Otherwise, errors may occur during the subsequent process.
-```
+`install.sh` will:
 
-For domestic users in China, you can use the following commands to add domestic mirror sources:
+- use `uv` to provision the locked Python 3.12.0 runtime
+- sync the locked Python dependency graph from `tools/locks/default/pyproject.toml` and `tools/locks/default/uv.lock`
+- install the SDK toolchain versions bound by `tools/locks/default/lock.json`
+- initialize the profile-specific Conan home under `SIFLI_SDK_TOOLS_PATH`
+
+For domestic users in China, you can separately configure the artifact mirror and the Python package index:
 
 ```bash
 cd ~/OpenSiFli/SiFli-SDK
-export SIFLI_SDK_GITHUB_ASSETS="downloads.sifli.com/github_assets"
-export PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/simple"
+export SIFLI_SDK_MIRROR="https://downloads.sifli.com/github_assets"
+export SIFLI_SDK_PYPI_DEFAULT_INDEX="https://mirrors.ustc.edu.cn/pypi/simple"
 ./install.sh
 ```
 
@@ -178,6 +189,8 @@ Please run the following command in terminal windows where you need to use compi
 . export.sh
 ```
 
+`export.sh` now uses the Python virtual environment created by `install.sh`. If that profile environment has not been installed yet, or was removed manually, `export.sh` will fail immediately and ask you to run `./install.sh` first.
+
 ````{note}
 If you have set a custom tool installation path according to the above instructions, then you **must** set the `SIFLI_SDK_TOOLS_PATH` variable before running the `export.sh` script
 ```powershell
@@ -188,7 +201,7 @@ export SIFLI_SDK_TOOLS_PATH="$HOME/required_sdk_tools_path"
 ````
 
 ```{note}
-The current script may have some occasional bugs. If you get prompts like "command not found `arm-none-eabi-gcc`" during compilation, you can try running `. export.sh` twice to resolve it.
+`export.sh` now validates the current profile state before exporting the environment. If the local Python environment, tools, or Conan config drift from the repo lock, `export.sh` may prompt to reconcile the environment or fail deterministically in non-interactive shells.
 ```
 
 If you need to run SiFli-SDK frequently, you can create an alias for executing export.sh by following these steps:

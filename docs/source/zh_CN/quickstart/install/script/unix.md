@@ -44,7 +44,7 @@ sudo pacman -S --needed gcc git make flex bison gperf python cmake ninja ccache 
 :::::{tab-item} macOS
 :sync: macOS
 
-SiFli-SDK 将使用 macOS 上默认安装的 Python 版本。
+当前的 SiFli-SDK 安装流程不再依赖系统 Python。`install.sh` 会通过 `uv` 准备锁定的 Python 3.12.0 运行时和依赖。
 
 - 安装 CMake 和 Ninja 编译工具：
   - Homebrew 用户：
@@ -75,6 +75,14 @@ xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools
 :::::
 
 ::::::
+
+## 安装 `uv`
+
+当前 install/export 主链路只支持通过 `uv` 引导。请先安装 `uv`，并确保终端中可以正常执行：
+
+```bash
+uv --version
+```
 
 ## 获取 SiFli-SDK
 
@@ -138,16 +146,19 @@ cd ~/OpenSiFli/SiFli-SDK
 ./install.sh
 ```
 
-```{warning} 
-需要注意的是，不能使用pyenv工具管理系统的python环境，否则在后续的过程中可能会发生错误。
-```
+`install.sh` 会自动完成以下工作：
 
-对于国内用户来说，可以使用如下命令来添加国内镜像源：
+- 通过 `uv` 准备锁定的 Python 3.12.0 运行时
+- 根据 `tools/locks/default/pyproject.toml` 和 `tools/locks/default/uv.lock` 同步锁定的 Python 依赖
+- 根据 `tools/locks/default/lock.json` 安装当前 profile 绑定的工具版本
+- 在 `SIFLI_SDK_TOOLS_PATH` 下初始化 profile 级别的 Conan 环境
+
+对于国内用户，可以分别为工具归档和 Python 包配置镜像源：
 
 ```bash
 cd ~/OpenSiFli/SiFli-SDK
-export SIFLI_SDK_GITHUB_ASSETS="downloads.sifli.com/github_assets"
-export PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/simple"
+export SIFLI_SDK_MIRROR="https://downloads.sifli.com/github_assets"
+export SIFLI_SDK_PYPI_DEFAULT_INDEX="https://mirrors.ustc.edu.cn/pypi/simple"
 ./install.sh
 ```
 
@@ -178,6 +189,8 @@ export SIFLI_SDK_TOOLS_PATH="$HOME/required_sdk_tools_path"
 . export.sh
 ```
 
+`export.sh` 现在直接使用 `install.sh` 创建的 Python 虚拟环境。如果当前 profile 的虚拟环境尚未安装，或者被手动删除，`export.sh` 会立即失败，并提示先执行 `./install.sh`。
+
 ````{note}
 如果按照上述说明设置过自定义工具安装路径，那么在运行 `export.sh` 脚本之前**必须**设置`SIFLI_SDK_TOOLS_PATH` 变量
 ```powershell
@@ -188,7 +201,7 @@ export SIFLI_SDK_TOOLS_PATH="$HOME/required_sdk_tools_path"
 ````
 
 ```{note}
-目前的脚本可能有一些偶现的bug，如果在编译的时候提示找不到`arm-none-eabi-gcc`等命令，可以尝试运行两次`. export.sh`解决。
+`export.sh` 现在会在导出环境前检查当前 profile 的 Python 环境、工具版本和 Conan 配置是否仍与仓库锁文件一致。如果检测到漂移，交互式终端可能会提示修复；非交互场景下会直接以确定性错误退出。
 ```
 
 如果需要经常运行 SiFli-SDK，可以为执行 export.sh 创建一个别名，具体步骤如下：

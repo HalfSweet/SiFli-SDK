@@ -2,22 +2,14 @@
 
 ## Installation Prerequisites
 
-### Python Environment
+### `uv` Environment
 
-For Windows users, you need to ensure that the `Python` environment variable exists in the environment variables.
+Windows users do not need to pre-install system Python for the SDK scripts anymore. The supported workflow uses `uv` to provision the locked Python 3.12.0 runtime on demand.
 
-If Python is not installed, please refer to the [Python official website](https://www.python.org/downloads/) to download and install Python version 3.9 or above, below 3.14. After installation, make sure to add Python to the system's environment variables.
-
-![](image/2025-05-26-13-39-17.png)
-
-```{note}
-For domestic users in China, you can use the following domestic mirror link to download Python installer: <https://mirrors.ustc.edu.cn/python/3.12.0/python-3.12.0.exe>
-```
-
-After installation, you can run the `python --version` command in the terminal to check if Python is installed successfully. Normally, it should output Python version information, such as:
+After installing `uv`, run the following command in PowerShell to verify it is available:
 
 ```powershell
-Python 3.12.0
+uv --version
 ```
 
 ### Git Environment
@@ -118,17 +110,20 @@ cd C:\OpenSiFli\SiFli-SDK
 .\install.ps1
 ```
 
-```{warning} 
-It should be noted that the pyenv tool should not be used to manage the Python environment of the system. Otherwise, errors may occur during the subsequent process.
-```
+`install.ps1` will:
+
+- use `uv` to provision the locked Python 3.12.0 runtime
+- sync the locked Python dependency graph from `tools/locks/default/pyproject.toml` and `tools/locks/default/uv.lock`
+- install the SDK toolchain versions bound by `tools/locks/default/lock.json`
+- initialize the profile-specific Conan home under `SIFLI_SDK_TOOLS_PATH`
 
 ````{note}
 Domestic users in China can use the following commands to install tool packages through domestic mirror sources to avoid slow download speeds from default sources. Note that if you choose to execute the following commands, you do not need to execute the commands in the above code block.
 
 ```powershell
 cd C:\OpenSiFli\SiFli-SDK
-$env:SIFLI_SDK_GITHUB_ASSETS="downloads.sifli.com/github_assets"
-$env:PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/simple"
+$env:SIFLI_SDK_MIRROR="https://downloads.sifli.com/github_assets"
+$env:SIFLI_SDK_PYPI_DEFAULT_INDEX="https://mirrors.ustc.edu.cn/pypi/simple"
 .\install.ps1
 ```
 
@@ -166,6 +161,8 @@ cd C:\OpenSiFli\SiFli-SDK
 .\export.ps1
 ```
 
+`export.ps1` now uses the Python virtual environment created by `install.ps1`. If that profile environment has not been installed yet, or was removed manually, `export.ps1` will fail immediately and ask you to run `.\install.ps1` first.
+
 ````{note}
 If you have set a custom tool installation path according to the above instructions, then you **must** set the `SIFLI_SDK_TOOLS_PATH` variable before running the `export.ps1` script
 ```powershell
@@ -180,7 +177,7 @@ Each time you open a new terminal window, you need to run the `export.ps1` scrip
 ```
 
 ```{note}
-The current script may have some occasional bugs. If you get prompts like "command not found `arm-none-eabi-gcc`" during compilation, you can try running `. export.ps1` twice to resolve it.
+`export.ps1` now validates the current profile state before exporting the environment. If the local Python environment, tools, or Conan config drift from the repo lock, `export.ps1` may prompt to reconcile the environment or fail deterministically in non-interactive shells.
 ```
 
 ### Windows Terminal Quick Configuration
