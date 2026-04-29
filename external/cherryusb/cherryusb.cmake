@@ -41,6 +41,7 @@ list(
     ${CMAKE_CURRENT_LIST_DIR}/class/cdc
     ${CMAKE_CURRENT_LIST_DIR}/class/hid
     ${CMAKE_CURRENT_LIST_DIR}/class/msc
+    ${CMAKE_CURRENT_LIST_DIR}/class/mtp
     ${CMAKE_CURRENT_LIST_DIR}/class/audio
     ${CMAKE_CURRENT_LIST_DIR}/class/video
     ${CMAKE_CURRENT_LIST_DIR}/class/wireless
@@ -65,6 +66,9 @@ if(CONFIG_CHERRYUSB_DEVICE)
     endif()
     if(CONFIG_CHERRYUSB_DEVICE_MSC)
         list(APPEND cherryusb_srcs ${CMAKE_CURRENT_LIST_DIR}/class/msc/usbd_msc.c)
+    endif()
+    if(CONFIG_CHERRYUSB_DEVICE_MTP)
+        list(APPEND cherryusb_srcs ${CMAKE_CURRENT_LIST_DIR}/class/mtp/usbd_mtp.c)
     endif()
     if(CONFIG_CHERRYUSB_DEVICE_AUDIO)
         list(APPEND cherryusb_srcs ${CMAKE_CURRENT_LIST_DIR}/class/audio/usbd_audio.c)

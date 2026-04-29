@@ -285,7 +285,7 @@ int usbd_mtp_open(const char *path, uint8_t mode)
     if (mode == O_RDONLY) {
         flags = FA_READ | FA_OPEN_EXISTING;
     } else if (mode == O_WRONLY) {
-        flags = FA_WRITE | FA_OPEN_ALWAYS;
+        flags = FA_WRITE | FA_CREATE_ALWAYS;
     } else if (mode == O_RDWR) {
         flags = FA_READ | FA_WRITE | FA_OPEN_ALWAYS;
     } else {

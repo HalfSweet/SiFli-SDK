@@ -125,8 +125,62 @@ if CHERRYUSB
 
         config CHERRYUSB_DEVICE_MTP
             bool
-            prompt "Enable usb mtp device, it is commercial charge"
+            prompt "Enable usb mtp device"
             default n
+
+        if CHERRYUSB_DEVICE_MTP
+            config USBDEV_MTP_MAX_BUFSIZE
+                int
+                prompt "Set usb mtp max transfer buffer size"
+                default 2048
+
+            config USBDEV_MTP_MAX_OBJECTS
+                int
+                prompt "Set usb mtp max object count"
+                default 256
+
+            config USBDEV_MTP_MAX_PATHNAME
+                int
+                prompt "Set usb mtp max path length"
+                default 256
+
+            config USBDEV_MTP_MANUFACTURER
+                string
+                prompt "Set usb mtp manufacturer string"
+                default "CherryUSB"
+
+            config USBDEV_MTP_MODEL
+                string
+                prompt "Set usb mtp model string"
+                default "CherryUSB MTP"
+
+            config USBDEV_MTP_DEVICE_VERSION
+                string
+                prompt "Set usb mtp device version string"
+                default "1.00"
+
+            config USBDEV_MTP_SERIAL_NUMBER
+                string
+                prompt "Set usb mtp 32-bit hex serial string"
+                default "20260428"
+
+            config USBDEV_MTP_THREAD
+                bool
+                prompt "Move mtp filesystem operations to thread"
+                default y
+
+            config USBDEV_MTP_PRIO
+                int
+                prompt "Set usb mtp thread priority"
+                default 4
+                depends on USBDEV_MTP_THREAD
+
+            config USBDEV_MTP_STACKSIZE
+                int
+                prompt "Set usb mtp thread stack size"
+                default 4096
+                depends on USBDEV_MTP_THREAD
+        endif
 
         config CHERRYUSB_DEVICE_ADB
             bool
@@ -246,6 +300,10 @@ if CHERRYUSB
                 bool
                 prompt "display"
                 depends on CHERRYUSB_DEVICE_DISPLAY
+            config CHERRYUSB_DEVICE_TEMPLATE_MTP
+                bool
+                prompt "mtp"
+                depends on CHERRYUSB_DEVICE_MTP
         endchoice
     endif
 

@@ -131,8 +131,62 @@ if PKG_USING_CHERRYUSB
 
         config PKG_CHERRYUSB_DEVICE_MTP
             bool
-            prompt "Enable usb mtp device, it is commercial charge"
+            prompt "Enable usb mtp device"
             default n
+
+        if PKG_CHERRYUSB_DEVICE_MTP
+            config CONFIG_USBDEV_MTP_MAX_BUFSIZE
+                int
+                prompt "Set usb mtp max transfer buffer size"
+                default 2048
+
+            config CONFIG_USBDEV_MTP_MAX_OBJECTS
+                int
+                prompt "Set usb mtp max object count"
+                default 256
+
+            config CONFIG_USBDEV_MTP_MAX_PATHNAME
+                int
+                prompt "Set usb mtp max path length"
+                default 256
+
+            config CONFIG_USBDEV_MTP_MANUFACTURER
+                string
+                prompt "Set usb mtp manufacturer string"
+                default "CherryUSB"
+
+            config CONFIG_USBDEV_MTP_MODEL
+                string
+                prompt "Set usb mtp model string"
+                default "CherryUSB MTP"
+
+            config CONFIG_USBDEV_MTP_DEVICE_VERSION
+                string
+                prompt "Set usb mtp device version string"
+                default "1.00"
+
+            config CONFIG_USBDEV_MTP_SERIAL_NUMBER
+                string
+                prompt "Set usb mtp 32-bit hex serial string"
+                default "20260428"
+
+            config CONFIG_USBDEV_MTP_THREAD
+                bool
+                prompt "Move mtp filesystem operations to thread"
+                default y
+
+            config CONFIG_USBDEV_MTP_PRIO
+                int
+                prompt "Set usb mtp thread priority"
+                default 4
+                depends on CONFIG_USBDEV_MTP_THREAD
+
+            config CONFIG_USBDEV_MTP_STACKSIZE
+                int
+                prompt "Set usb mtp thread stack size"
+                default 4096
+                depends on CONFIG_USBDEV_MTP_THREAD
+        endif
 
         config PKG_CHERRYUSB_DEVICE_ADB
             bool
@@ -269,6 +323,10 @@ if PKG_USING_CHERRYUSB
                 bool
                 prompt "cdc_acm_chardev"
                 depends on PKG_CHERRYUSB_DEVICE_CDC_ACM_CHARDEV
+            config PKG_CHERRYUSB_DEVICE_TEMPLATE_MTP
+                bool
+                prompt "mtp"
+                depends on PKG_CHERRYUSB_DEVICE_MTP
         endchoice
 
         config CONFIG_USBDEV_MSC_BLOCK_DEV_NAME

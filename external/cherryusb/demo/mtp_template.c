@@ -8,10 +8,6 @@
 #include "usbd_core.h"
 #include "usbd_mtp.h"
 
-#if 1
-#error "commercial charge"
-#endif
-
 #ifndef CONFIG_USBDEV_MTP_THREAD
 #warning mtp depends on filesystem, suggest to enable CONFIG_USBDEV_MTP_THREAD
 #endif
@@ -134,9 +130,9 @@ static const uint8_t other_speed_config_descriptor_fs[] = {
 
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
-    "CherryUSB",                  /* Manufacturer */
-    "CherryUSB MTP DEMO",         /* Product */
-    "2025053000",                 /* Serial Number */
+    CONFIG_USBDEV_MTP_MANUFACTURER, /* Manufacturer */
+    CONFIG_USBDEV_MTP_MODEL,        /* Product */
+    CONFIG_USBDEV_MTP_SERIAL_NUMBER, /* Serial Number */
 };
 
 static const uint8_t *device_descriptor_callback(uint8_t speed)

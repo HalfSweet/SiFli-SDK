@@ -6,6 +6,7 @@
 #include "usbd_core.h"
 #include "usbh_core.h"
 #include "usb_musb_reg.h"
+#include "rtthread.h"
 
 #undef USB_POWER_SOFTCONN
 #undef USB_DEVCTL_FSDEV

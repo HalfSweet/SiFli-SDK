@@ -7,6 +7,7 @@ path += [cwd + '/core']
 path += [cwd + '/class/hub']
 path += [cwd + '/class/cdc']
 path += [cwd + '/class/msc']
+path += [cwd + '/class/mtp']
 path += [cwd + '/class/hid']
 path += [cwd + '/class/audio']
 path += [cwd + '/class/video']
@@ -125,6 +126,8 @@ if GetDepend(['PKG_CHERRYUSB_DEVICE']):
         src += Glob('class/hid/usbd_hid.c')
     if GetDepend(['PKG_CHERRYUSB_DEVICE_MSC']):
         src += Glob('class/msc/usbd_msc.c')
+    if GetDepend(['PKG_CHERRYUSB_DEVICE_MTP']):
+        src += Glob('class/mtp/usbd_mtp.c')
     if GetDepend(['PKG_CHERRYUSB_DEVICE_AUDIO']):
         src += Glob('class/audio/usbd_audio.c')
     if GetDepend(['PKG_CHERRYUSB_DEVICE_VIDEO']):
@@ -191,6 +194,10 @@ if GetDepend(['PKG_CHERRYUSB_DEVICE']):
         src += Glob('demo/adb/usbd_adb_template.c')
     if GetDepend(['PKG_CHERRYUSB_DEVICE_TEMPLATE_CDC_ACM_CHARDEV']):
         src += Glob('demo/cdc_acm_rttchardev_template.c')
+    if GetDepend(['PKG_CHERRYUSB_DEVICE_TEMPLATE_MTP']):
+        src += Glob('demo/mtp_template.c')
+        src += Glob('platform/fatfs/usbd_fatfs_mtp.c')
+        path += [cwd + '/platform/fatfs']
 
 # USB HOST
 if GetDepend(['PKG_CHERRYUSB_HOST']):
@@ -353,4 +360,3 @@ src += Glob('platform/rtthread/usb_check.c')
 group = DefineGroup('CherryUSB', src, depend = ['PKG_USING_CHERRYUSB'], LIBS = LIBS, LIBPATH=LIBPATH, CPPPATH = path, CPPDEFINES = CPPDEFINES)
 
 Return('group')
-
