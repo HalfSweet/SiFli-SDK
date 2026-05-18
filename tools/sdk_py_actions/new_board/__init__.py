@@ -174,6 +174,7 @@ class Spec:
     board_name: str
     base_name: str
     generate_base: bool
+    storage_pinmux_type: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -360,6 +361,30 @@ def prompt_for_config(variants: Dict[str, List[ChipVariant]]) -> Dict[str, Any]:
             ),
             'Board creation cancelled.',
         )
+    elif series == '58' and storage_type == 'sdmmc':
+        storage_port = ask(
+            questionary.select(
+                'Select external storage port',
+                choices=[
+                    questionary.Choice('sdmmc2', value='sdmmc2'),
+                    questionary.Choice('sdmmc1', value='sdmmc1'),
+                ],
+            ),
+            'Board creation cancelled.',
+        )
+
+    storage_pinmux_type: Optional[str] = None
+    if series == '58' and storage_port in ('mpi4', 'sdmmc1'):
+        storage_pinmux_type = ask(
+            questionary.select(
+                'Select storage pinmux type',
+                choices=[
+                    questionary.Choice('type0', value='type0'),
+                    questionary.Choice('type1', value='type1'),
+                ],
+            ),
+            'Board creation cancelled.',
+        )
 
     storage_size_mb: Optional[int] = None
     if storage_type != 'none':
@@ -405,6 +430,7 @@ def prompt_for_config(variants: Dict[str, List[ChipVariant]]) -> Dict[str, Any]:
         board_name=board_name,
         base_name=base_name,
         generate_base=generate_base,
+        storage_pinmux_type=storage_pinmux_type,
     )
 
     confirmed = ask(
@@ -426,6 +452,8 @@ def prompt_for_config(variants: Dict[str, List[ChipVariant]]) -> Dict[str, Any]:
     }
     if storage_size_mb is not None:
         config['storage']['size_mb'] = storage_size_mb
+    if storage_pinmux_type is not None:
+        config['storage']['pinmux_type'] = storage_pinmux_type
     if storage_port is not None:
         config['storage_port'] = storage_port
     return config
@@ -440,6 +468,7 @@ def build_confirmation_summary(
     board_name: str,
     base_name: str,
     generate_base: bool,
+    storage_pinmux_type: Optional[str] = None,
 ) -> List[str]:
     lines = [
         '[Chip]',
@@ -451,6 +480,8 @@ def build_confirmation_summary(
     ]
     if storage_port:
         lines.append(f'  port: {storage_port}')
+    if storage_pinmux_type:
+        lines.append(f'  pinmux_type: {storage_pinmux_type}')
     if storage_size_mb is not None:
         lines.append(f'  capacity_mb: {storage_size_mb}')
 
@@ -479,6 +510,9 @@ def normalize_spec(
     storage = raw_config.get('storage') or {}
     storage_type = str(storage.get('type') or '').strip().lower()
     storage_size_mb = storage.get('size_mb')
+    storage_pinmux_type = storage.get('pinmux_type')
+    if storage_pinmux_type:
+        storage_pinmux_type = str(storage_pinmux_type).strip().lower()
     storage_port = raw_config.get('storage_port')
     if storage_port:
         storage_port = str(storage_port).strip().lower()
@@ -521,8 +555,23 @@ def normalize_spec(
         elif storage_port not in allowed_sdmmc_storage_ports(series):
             allowed = '|'.join(allowed_sdmmc_storage_ports(series))
             raise FatalError(f'Series {series} requires storage_port={allowed} when storage.type is "sdmmc".')
+            if storage_port is None:
+                storage_port = 'sdmmc2'
+            if storage_port not in ('sdmmc1', 'sdmmc2'):
+                raise FatalError('Series 58 requires storage_port=sdmmc1|sdmmc2 for sdmmc external storage.')
+        if storage_type == 'none' and storage_port is not None:
+            raise FatalError('storage_port is not supported when storage.type is "none".')
+        if storage_type == 'none' and storage_pinmux_type is not None:
+            raise FatalError('storage.pinmux_type is not supported when storage.type is "none".')
+        if storage_port in ('mpi4', 'sdmmc1'):
+            if storage_pinmux_type not in ('type0', 'type1'):
+                raise FatalError(f'Series 58 storage_port={storage_port} requires storage.pinmux_type=type0|type1.')
+        elif storage_pinmux_type is not None:
+            raise FatalError('storage.pinmux_type is only supported for series 58 storage_port=mpi4|sdmmc1.')
     else:
         storage_port = None
+        if storage_pinmux_type is not None:
+            raise FatalError('storage.pinmux_type is only supported for series 58 storage_port=mpi4|sdmmc1.')
 
     psram = variant.first_psram()
     if storage_type in ('nand', 'sdmmc') and psram is None:
@@ -542,6 +591,7 @@ def normalize_spec(
         board_name=board_name,
         base_name=base_name,
         generate_base=generate_base,
+        storage_pinmux_type=storage_pinmux_type,
     )
     return spec, variant
 
@@ -683,7 +733,13 @@ def render_board_files(
             source_path = sample_base_dir / name
             if not source_path.exists():
                 raise FatalError(f'Base template file not found: {source_path}')
-            rendered[base_dir / name] = env.from_string(source_path.read_text(encoding='utf-8')).render()
+            if use_new_board_base_template(spec, name):
+                rendered[base_dir / name] = render_template(env, template_prefix + f'base/{name}.jinja2', {
+                    'base_content': source_path.read_text(encoding='utf-8'),
+                    'storage_pinmux_type': spec.storage_pinmux_type,
+                })
+            else:
+                rendered[base_dir / name] = env.from_string(source_path.read_text(encoding='utf-8')).render()
 
         rendered[base_dir / 'SConscript.base'] = render_template(env, template_prefix + 'base/SConscript.base.jinja2', {})
 
@@ -725,6 +781,14 @@ def check_render_targets(rendered: Dict[Path, str], board_dir: Path, base_dir: O
 
 def render_template(env: Any, template_name: str, context: Dict[str, Any]) -> str:
     return env.get_template(template_name).render(**context)
+
+
+def use_new_board_base_template(spec: Spec, filename: str) -> bool:
+    if spec.series != '58' or filename != 'bsp_pinmux.c':
+        return False
+    if spec.storage_pinmux_type != 'type1':
+        return False
+    return storage_region_for_spec(spec) in ('mpi4', 'sdmmc1')
 
 
 def render_ptab_yaml(
@@ -922,6 +986,13 @@ def build_hcpu_board_conf_context(spec: Spec, variant: ChipVariant) -> Dict[str,
         'use_sdhci2': storage_region == 'sdmmc2',
         'sd_max_freq': spec.series in ('56', '58') and storage_region == 'sdmmc1',
         'sd2_max_freq': spec.series == '58' and storage_region == 'sdmmc2',
+        'use_sdhci1': (
+            spec.storage_type == 'sdmmc'
+            and (spec.series == '56' or (spec.series == '58' and storage_region_for_spec(spec) == 'sdmmc1'))
+        ),
+        'use_sdhci2': spec.series == '58' and spec.storage_type == 'sdmmc' and storage_region_for_spec(spec) == 'sdmmc2',
+        'use_sdmmc1': spec.storage_type == 'sdmmc' and storage_region_for_spec(spec) == 'sdmmc1',
+        'use_sdmmc2': spec.storage_type == 'sdmmc' and storage_region_for_spec(spec) == 'sdmmc2',
         'rt_using_mtd_nand': spec.storage_type == 'nand',
         'has_psram_cache_wb': variant.first_psram() is not None,
     }
@@ -1035,10 +1106,14 @@ def choose_hcpu_jlink_device(spec: Spec) -> str:
         return 'SF32LB56X'
 
     if spec.storage_type == 'nand':
-        return 'SF32LB58X_NAND'
-    if spec.storage_type == 'sdmmc':
-        return 'SF32LB58X_SD'
-    return 'SF32LB58X'
+        device = 'SF32LB58X_NAND'
+    elif spec.storage_type == 'sdmmc':
+        device = 'SF32LB58X_SD'
+    else:
+        device = 'SF32LB58X'
+    if spec.storage_pinmux_type == 'type1':
+        device += '_TYPE1'
+    return device
 
 
 def board_config_symbol(board_name: str) -> str:
@@ -1079,6 +1154,9 @@ def storage_region_for_spec(spec: Spec, none_region: Optional[str] = None) -> st
                 raise FatalError(f'Series {spec.series} requires storage_port={allowed} when storage.type is "sdmmc".')
             return spec.storage_port
         return default_sdmmc_storage_port(spec.series)
+        if spec.series == '58':
+            return str(spec.storage_port or 'sdmmc2')
+        return 'sdmmc1'
     if spec.series == '52':
         return 'mpi2'
     if spec.series == '56':

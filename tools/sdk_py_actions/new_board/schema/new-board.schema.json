@@ -32,6 +32,10 @@
         "size_mb": {
           "type": "integer",
           "minimum": 1
+        },
+        "pinmux_type": {
+          "type": "string",
+          "enum": ["type0", "type1"]
         }
       }
     },

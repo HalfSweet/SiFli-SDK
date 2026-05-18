@@ -1,0 +1,29 @@
+{% set default_sdmmc1_pins -%}
+    HAL_PIN_Set(PAD_PA66, GPIO_A66, PIN_PULLUP, 1);     // SD1 RESET, need set 0 first?
+    HAL_PIN_Set(PAD_PA64, GPIO_A64, PIN_PULLUP, 1);     // SD1 EN
+{%- endset %}
+{% set type1_sdmmc1_pins -%}
+    HAL_PIN_Set(PAD_PA49, GPIO_A49, PIN_PULLUP, 1);     // SD1 RESET, need set 0 first?
+    HAL_PIN_Set(PAD_PA80, GPIO_A80, PIN_PULLUP, 1);     // SD1 EN
+{%- endset %}
+{% set default_mpi4_pins -%}
+    HAL_PIN_Set(PAD_PA09, MPI4_CLK, PIN_NOPULL, 1);
+    HAL_PIN_Set(PAD_PA10, MPI4_CS, PIN_NOPULL, 1);
+    HAL_PIN_Set(PAD_PA05, MPI4_DIO0, PIN_PULLDOWN, 1);
+    HAL_PIN_Set(PAD_PA04, MPI4_DIO1, PIN_PULLDOWN, 1);
+    HAL_PIN_Set(PAD_PA01, MPI4_DIO2, PIN_PULLUP, 1);
+    HAL_PIN_Set(PAD_PA06, MPI4_DIO3, PIN_PULLUP, 1);
+{%- endset %}
+{% set type1_mpi4_pins -%}
+    HAL_PIN_Set(PAD_PA39, MPI4_CLK, PIN_NOPULL, 1);
+    HAL_PIN_Set(PAD_PA30, MPI4_CS, PIN_NOPULL, 1);
+    HAL_PIN_Set(PAD_PA40, MPI4_DIO0, PIN_PULLDOWN, 1);
+    HAL_PIN_Set(PAD_PA37, MPI4_DIO1, PIN_PULLDOWN, 1);
+    HAL_PIN_Set(PAD_PA36, MPI4_DIO2, PIN_PULLUP, 1);
+    HAL_PIN_Set(PAD_PA38, MPI4_DIO3, PIN_PULLUP, 1);
+{%- endset %}
+{% if storage_pinmux_type == 'type1' -%}
+{{ base_content | replace(default_sdmmc1_pins, type1_sdmmc1_pins) | replace(default_mpi4_pins, type1_mpi4_pins) }}
+{%- else -%}
+{{ base_content }}
+{%- endif %}

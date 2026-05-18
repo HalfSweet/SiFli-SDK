@@ -67,23 +67,30 @@ class NewBoardRenderTests(unittest.TestCase):
         chip_model: str = "SF32LB52X",
         storage_type: str = "none",
         storage_size_mb: Optional[int] = None,
+        storage_port: Optional[str] = None,
+        storage_pinmux_type: Optional[str] = None,
     ) -> Spec:
         return Spec(
             series=series,
             chip_model=chip_model,
             storage_type=storage_type,
             storage_size_mb=storage_size_mb,
-            storage_port=None,
+            storage_port=storage_port,
             board_name="demo_board",
             base_name=base_name,
             generate_base=generate_base,
+            storage_pinmux_type=storage_pinmux_type,
         )
 
-    def make_sample_base(self, series: str = "52") -> None:
+    def make_sample_base(self, series: str = "52", real_pinmux: bool = False) -> None:
         base_dir = self.sdk_root / SAMPLE_BASE[series]
         base_dir.mkdir(parents=True)
         for name in BASE_TEMPLATE_FILES:
-            (base_dir / name).write_text(f"// {name}\n", encoding="utf-8")
+            if real_pinmux and name == "bsp_pinmux.c":
+                content = (Path(ROOT) / SAMPLE_BASE[series] / name).read_text(encoding="utf-8")
+            else:
+                content = f"// {name}\n"
+            (base_dir / name).write_text(content, encoding="utf-8")
 
     def make_existing_base(self, base_dir: Path, base_kind: str = "base") -> None:
         base_dir.mkdir(parents=True)
@@ -236,6 +243,79 @@ class NewBoardRenderTests(unittest.TestCase):
         self.assertIn("    region: sdmmc2\n", content)
         self.assertNotIn("mpi: mpi4", content)
 
+    def test_58_sdmmc1_type1_uses_sdmmc1_region_and_jlink_suffix(self) -> None:
+        self.make_existing_base(self.output_root / "shared_base")
+        variant = ChipVariant(
+            series="58",
+            chip_dir="SF32LB58x",
+            model_id="SF32LB58X",
+            part_number="SF32LB58X",
+            memory=(MemoryEntry("mpi1", "psram", 32 * MB),),
+        )
+        spec = self.make_spec(
+            "shared_base",
+            series="58",
+            chip_model="SF32LB58X",
+            storage_type="sdmmc",
+            storage_size_mb=16,
+            storage_port="sdmmc1",
+            storage_pinmux_type="type1",
+        )
+
+        rendered = render_board_files(
+            spec=spec,
+            variant=variant,
+            sdk_root=self.sdk_root,
+            output_root=self.output_root,
+            assets_root=ASSETS_ROOT,
+        )
+
+        ptab = rendered[self.output_root / spec.board_name / "ptab.yaml"]
+        board_conf = rendered[self.output_root / spec.board_name / "hcpu" / "board.conf"]
+        rtconfig = rendered[self.output_root / spec.board_name / "hcpu" / "rtconfig.py"]
+        self.assertIn("  - sdmmc: sdmmc1\n    type: sd\n", ptab)
+        self.assertIn("    region: sdmmc1\n", ptab)
+        self.assertIn("CONFIG_BSP_USING_SDMMC1=y\n", board_conf)
+        self.assertIn("CONFIG_SD_MAX_FREQ=48000000\n", board_conf)
+        self.assertNotIn("CONFIG_BSP_USING_SDMMC2=y\n", board_conf)
+        self.assertIn("JLINK_DEVICE = 'SF32LB58X_SD_TYPE1'\n", rtconfig)
+
+    def test_generated_58_type1_base_specializes_storage_pinmux(self) -> None:
+        self.make_sample_base(series="58", real_pinmux=True)
+        variant = ChipVariant(
+            series="58",
+            chip_dir="SF32LB58x",
+            model_id="SF32LB58X",
+            part_number="SF32LB58X",
+            memory=(MemoryEntry("mpi1", "psram", 32 * MB),),
+        )
+        spec = self.make_spec(
+            "demo_board_base",
+            generate_base=True,
+            series="58",
+            chip_model="SF32LB58X",
+            storage_type="nand",
+            storage_size_mb=128,
+            storage_port="mpi4",
+            storage_pinmux_type="type1",
+        )
+
+        rendered = render_board_files(
+            spec=spec,
+            variant=variant,
+            sdk_root=self.sdk_root,
+            output_root=self.output_root,
+            assets_root=ASSETS_ROOT,
+        )
+
+        pinmux = rendered[self.output_root / spec.base_name / "bsp_pinmux.c"]
+        rtconfig = rendered[self.output_root / spec.board_name / "hcpu" / "rtconfig.py"]
+        self.assertIn("HAL_PIN_Set(PAD_PA39, MPI4_CLK, PIN_NOPULL, 1);", pinmux)
+        self.assertIn("HAL_PIN_Set(PAD_PA49, GPIO_A49, PIN_PULLUP, 1);", pinmux)
+        self.assertNotIn("HAL_PIN_Set(PAD_PA09, MPI4_CLK, PIN_NOPULL, 1);", pinmux)
+        self.assertNotIn("HAL_PIN_Set(PAD_PA66, GPIO_A66, PIN_PULLUP, 1);", pinmux)
+        self.assertIn("JLINK_DEVICE = 'SF32LB58X_NAND_TYPE1'\n", rtconfig)
+
     def test_normalize_spec_allows_absolute_existing_base_path(self) -> None:
         external_base = self.root / "external" / "shared_base"
 
@@ -253,6 +333,45 @@ class NewBoardRenderTests(unittest.TestCase):
         )
 
         self.assertEqual(spec.base_name, str(external_base))
+
+    def test_normalize_58_pinmux_type_rules(self) -> None:
+        variant = ChipVariant(
+            series="58",
+            chip_dir="SF32LB58x",
+            model_id="SF32LB58X",
+            part_number="SF32LB58X",
+            memory=(MemoryEntry("mpi1", "psram", 32 * MB),),
+        )
+
+        with self.assertRaisesRegex(Exception, "storage_port=mpi4 requires"):
+            normalize_spec(
+                {
+                    "chip_series": "58",
+                    "chip_model": "SF32LB58X",
+                    "storage": {"type": "nor", "size_mb": 16},
+                    "storage_port": "mpi4",
+                    "board_name": "demo_board",
+                    "generate_base": False,
+                    "base_name": "shared_base",
+                },
+                SCHEMA_PATH,
+                {"58": [variant]},
+            )
+
+        with self.assertRaisesRegex(Exception, "pinmux_type is only supported"):
+            normalize_spec(
+                {
+                    "chip_series": "58",
+                    "chip_model": "SF32LB58X",
+                    "storage": {"type": "sdmmc", "size_mb": 16, "pinmux_type": "type1"},
+                    "storage_port": "sdmmc2",
+                    "board_name": "demo_board",
+                    "generate_base": False,
+                    "base_name": "shared_base",
+                },
+                SCHEMA_PATH,
+                {"58": [variant]},
+            )
 
     def test_confirmation_summary_explains_generated_base(self) -> None:
         summary = build_confirmation_summary(
